@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, field
-from typing import Callable
 
 from gamedeck.models import Game
 from gamedeck.provider_manager import ProviderManager
 
 __all__ = ["Scanner", "scan_games"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -27,7 +30,14 @@ class Scanner:
         Returns:
             A sorted list of discovered Game model instances.
         """
-        return self.provider_manager.get_games()
+        start_time = time.perf_counter()
+        logger.debug("Starting game library scan across enabled providers: %s", self.provider_manager.enabled_providers)
+
+        games = self.provider_manager.get_games()
+
+        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        logger.info("Scan completed in %.1fms. Total games available: %d", elapsed_ms, len(games))
+        return games
 
     def get_games(self) -> list[Game]:
         """Alias for scan."""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +14,8 @@ from gamedeck.scanner import Scanner
 from gamedeck.ui.rofi import RofiUI
 
 __all__ = ["GameDeck", "main"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -38,10 +41,13 @@ class GameDeck:
         Returns:
             Exit status code (0 for success, non-zero on error).
         """
+        logger.debug("Running GameDeck v%s", self.version)
+
         # Step 1: Scan for all games via ProviderManager/Scanner
         games = self.scanner.scan()
 
         if not games:
+            logger.info("No games discovered across enabled providers.")
             print("GameDeck: No installed games detected across configured providers.")
             return 0
 
@@ -49,14 +55,17 @@ class GameDeck:
         try:
             selected_game = self.ui.select(games)
         except RuntimeError as err:
+            logger.error("UI error during game selection: %s", err)
             print(f"GameDeck UI Error: {err}", file=sys.stderr)
             return 1
 
         # Step 3: Launch selected game if user did not cancel/dismiss
         if selected_game is not None:
+            logger.info("Launching selected game: %s [%s]", selected_game.name, selected_game.id)
             try:
                 launch(selected_game)
             except Exception as err:
+                logger.error("Failed to launch '%s': %s", selected_game.name, err)
                 print(f"GameDeck Launch Error: Failed to launch '{selected_game.name}': {err}", file=sys.stderr)
                 return 1
 
@@ -65,5 +74,9 @@ class GameDeck:
 
 def main() -> None:
     """Application main entry point."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     app = GameDeck()
     sys.exit(app.run())

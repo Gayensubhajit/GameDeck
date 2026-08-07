@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from dataclasses import dataclass
@@ -11,6 +12,8 @@ from typing import Any
 from gamedeck.models import Game
 
 __all__ = ["NativeLauncher", "launch"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -57,6 +60,7 @@ class NativeLauncher:
         if env:
             proc_env.update(env)
 
+        logger.info("Spawning native process: %s (cwd=%s)", cmd, working_dir)
         return subprocess.Popen(
             cmd,
             cwd=str(working_dir),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,6 +13,8 @@ import vdf
 from gamedeck.models import Game
 
 __all__ = ["SteamProvider", "get_games"]
+
+logger = logging.getLogger(__name__)
 
 # Known Steam runtime components, compatibility tools, and redistributables
 KNOWN_RUNTIME_APPIDS: frozenset[str] = frozenset(
@@ -101,11 +104,15 @@ class SteamProvider:
             manifest_files = sorted(steamapps_dir.glob("appmanifest_*.acf"), key=lambda p: p.name)
 
             for manifest_path in manifest_files:
-                game = self.parse_manifest(manifest_path, steamapps_dir)
-                if game is not None and game.id not in seen_ids:
-                    seen_ids.add(game.id)
-                    games.append(game)
+                try:
+                    game = self.parse_manifest(manifest_path, steamapps_dir)
+                    if game is not None and game.id not in seen_ids:
+                        seen_ids.add(game.id)
+                        games.append(game)
+                except Exception as err:
+                    logger.warning("Failed to parse Steam manifest '%s': %s", manifest_path, err)
 
+        logger.debug("Steam provider discovered %d games across %d libraries", len(games), len(libraries))
         return games
 
     def find_library_folders(self) -> list[Path]:
@@ -145,7 +152,8 @@ class SteamProvider:
                 try:
                     with vdf_file.open("r", encoding="utf-8", errors="replace") as f:
                         data = vdf.load(f)
-                except (OSError, vdf.VDFError, Exception):
+                except (OSError, vdf.VDFError, Exception) as err:
+                    logger.debug("Skipping unreadable Steam VDF '%s': %s", vdf_file, err)
                     continue
 
                 if not isinstance(data, dict):
@@ -168,7 +176,8 @@ class SteamProvider:
         try:
             with manifest_path.open("r", encoding="utf-8", errors="replace") as f:
                 data = vdf.load(f)
-        except (OSError, vdf.VDFError, Exception):
+        except (OSError, vdf.VDFError, Exception) as err:
+            logger.debug("Skipping unreadable manifest '%s': %s", manifest_path, err)
             return None
 
         if not isinstance(data, dict):
@@ -300,7 +309,6 @@ class SteamProvider:
         seen_dirs: set[Path],
     ) -> None:
         """Extract library directory paths from a parsed libraryfolders.vdf structure."""
-        # Check standard top-level keys
         top_section = data.get("libraryfolders") or data.get("LibraryFolders") or data
 
         if not isinstance(top_section, dict):
@@ -363,7 +371,12 @@ class SteamProvider:
             # 2. Check userdata grid folders
             userdata_dir = root / "userdata"
             if userdata_dir.is_dir():
-                for user_dir in userdata_dir.iterdir():
+                try:
+                    user_dirs = list(userdata_dir.iterdir())
+                except OSError:
+                    continue
+
+                for user_dir in user_dirs:
                     if not user_dir.is_dir():
                         continue
                     grid_dir = user_dir / "config" / "grid"

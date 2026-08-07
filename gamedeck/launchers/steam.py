@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -11,6 +12,8 @@ from typing import Any
 from gamedeck.models import Game
 
 __all__ = ["SteamLauncher", "launch"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -50,9 +53,10 @@ class SteamLauncher:
             # Fallback to xdg-open if steam binary is not directly available
             xdg_open = shutil.which("xdg-open")
             if xdg_open is not None:
-                cmd = [xdg_open, f"steam://rungameid/{appid}"]
+                uri = f"steam://rungameid/{appid}"
+                logger.info("Spawning Steam URI via xdg-open: %s", uri)
                 return subprocess.Popen(
-                    cmd,
+                    [xdg_open, uri],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     start_new_session=True,
@@ -61,11 +65,11 @@ class SteamLauncher:
                 f"Steam executable '{self.steam_bin}' was not found in PATH."
             )
 
-        # Standard launch command via Steam URI
         cmd = [executable, f"steam://rungameid/{appid}"]
         if extra_args:
             cmd.extend(extra_args)
 
+        logger.info("Spawning Steam process: %s", cmd)
         return subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,

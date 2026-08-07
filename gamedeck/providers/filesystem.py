@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from pathlib import Path
 from gamedeck.models import Game
 
 __all__ = ["FilesystemProvider", "get_games"]
+
+logger = logging.getLogger(__name__)
 
 # Ignored directory names containing redistributables, tools, or Wine system prefixes
 IGNORED_SUBDIR_NAMES: frozenset[str] = frozenset(
@@ -179,7 +182,8 @@ class FilesystemProvider:
                     [p for p in search_dir.iterdir() if p.is_dir() and not p.name.startswith(".")],
                     key=lambda p: p.name.lower(),
                 )
-            except OSError:
+            except OSError as err:
+                logger.debug("Skipping unreadable search directory '%s': %s", search_dir, err)
                 continue
 
             for game_dir in subdirs:
@@ -202,6 +206,7 @@ class FilesystemProvider:
                         seen_ids.add(game.id)
                         games.append(game)
 
+        logger.debug("Filesystem provider discovered %d games across %d search dirs", len(games), len(self.search_dirs))
         return games
 
     def find_game_executable(self, game_dir: Path) -> Path | None:

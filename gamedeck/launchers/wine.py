@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -12,6 +13,8 @@ from typing import Any
 from gamedeck.models import Game
 
 __all__ = ["WineLauncher", "launch"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -83,6 +86,7 @@ class WineLauncher:
         if env:
             proc_env.update(env)
 
+        logger.info("Spawning Wine process: %s (cwd=%s)", cmd, working_dir)
         return subprocess.Popen(
             cmd,
             cwd=str(working_dir),

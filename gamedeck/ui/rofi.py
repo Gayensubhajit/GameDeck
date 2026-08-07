@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -11,6 +12,8 @@ from pathlib import Path
 from gamedeck.models import Game
 
 __all__ = ["RofiUI", "show_menu", "select_game"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -102,6 +105,7 @@ class RofiUI:
             lines.append(line)
 
         input_payload = "\n".join(lines) + "\n"
+        logger.debug("Opening Rofi menu with %d items", len(games))
 
         try:
             result = subprocess.run(
@@ -114,10 +118,12 @@ class RofiUI:
                 check=False,
             )
         except OSError as err:
+            logger.error("Failed to execute Rofi process: %s", err)
             raise RuntimeError(f"Failed to execute Rofi: {err}") from err
 
         # Return code 0 indicates normal selection; non-zero (e.g. 1, 130) indicates cancel/Escape
         if result.returncode != 0:
+            logger.debug("Rofi selection cancelled (returncode=%d)", result.returncode)
             return None
 
         output = result.stdout.strip()
@@ -128,10 +134,15 @@ class RofiUI:
         if output.isdigit():
             selected_idx = int(output)
             if 0 <= selected_idx < len(games):
-                return games[selected_idx]
+                selected = games[selected_idx]
+                logger.info("User selected game: %s [%s]", selected.name, selected.id)
+                return selected
 
         # Fallback to display title matching
-        return name_map.get(output)
+        selected = name_map.get(output)
+        if selected is not None:
+            logger.info("User selected game (title match): %s [%s]", selected.name, selected.id)
+        return selected
 
     def show(self, games: list[Game]) -> Game | None:
         """Alias for select."""

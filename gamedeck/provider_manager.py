@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol
+from typing import Any, Callable
 
 from gamedeck.models import Game
+from gamedeck.providers import Provider
 
 __all__ = ["ProviderManager", "get_all_games", "PROVIDER_PRIORITY"]
+
+logger = logging.getLogger(__name__)
 
 # Provider priority hierarchy (higher value = higher precedence)
 # Order: Steam > Heroic > Lutris > Native > Filesystem
@@ -19,14 +23,6 @@ PROVIDER_PRIORITY: dict[str, int] = {
     "native": 20,
     "filesystem": 10,
 }
-
-
-class GameProvider(Protocol):
-    """Protocol for provider instances that implement get_games."""
-
-    def get_games(self) -> list[Game]:
-        """Retrieve a list of discovered Game model instances."""
-        ...
 
 
 @dataclass(slots=True)
@@ -45,7 +41,7 @@ class ProviderManager:
     enabled_providers: list[str] = field(
         default_factory=lambda: ["steam", "heroic", "lutris", "native", "filesystem"]
     )
-    custom_providers: dict[str, Callable[[], list[Game]] | GameProvider] = field(
+    custom_providers: dict[str, Callable[[], list[Game]] | Provider] = field(
         default_factory=dict
     )
 
@@ -62,7 +58,9 @@ class ProviderManager:
             games = self._load_provider_games(provider_key)
             all_games.extend(games)
 
-        return self.merge_and_deduplicate(all_games)
+        merged = self.merge_and_deduplicate(all_games)
+        logger.debug("ProviderManager merged %d total entries down to %d unique games", len(all_games), len(merged))
+        return merged
 
     def merge_and_deduplicate(self, games: list[Game]) -> list[Game]:
         """Deduplicate games by unique identifier and name, applying provider precedence.
@@ -93,7 +91,7 @@ class ProviderManager:
         for game in by_id.values():
             title_key = self.normalize_title(game.name)
             if not title_key:
-                # If name is blank, keep under unique ID
+                # If name is blank, preserve under unique ID
                 title_key = f"__id_{game.id}"
 
             if title_key not in by_title:
@@ -137,7 +135,8 @@ class ProviderManager:
                     return provider.get_games()
                 if callable(provider):
                     return provider()
-            except Exception:
+            except Exception as err:
+                logger.warning("Custom provider '%s' failed: %s", provider_key, err)
                 return []
 
         # 2. Built-in providers
@@ -172,7 +171,8 @@ class ProviderManager:
                     return native_get_games()
                 except (ImportError, AttributeError):
                     return []
-        except Exception:
+        except Exception as err:
+            logger.warning("Provider '%s' failed during game scan: %s", provider_key, err)
             return []
 
         return []

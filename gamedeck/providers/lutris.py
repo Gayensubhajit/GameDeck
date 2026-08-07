@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -13,6 +14,8 @@ import yaml
 from gamedeck.models import Game
 
 __all__ = ["LutrisProvider", "get_games"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -93,11 +96,15 @@ class LutrisProvider:
             )
 
             for file_path in yaml_files:
-                game = self.load_game_file(file_path)
-                if game is not None and game.id not in seen_ids:
-                    seen_ids.add(game.id)
-                    games.append(game)
+                try:
+                    game = self.load_game_file(file_path)
+                    if game is not None and game.id not in seen_ids:
+                        seen_ids.add(game.id)
+                        games.append(game)
+                except Exception as err:
+                    logger.warning("Failed to process Lutris config '%s': %s", file_path, err)
 
+        logger.debug("Lutris provider discovered %d games", len(games))
         return games
 
     def load_game_file(self, file_path: Path) -> Game | None:
@@ -112,7 +119,8 @@ class LutrisProvider:
         try:
             with file_path.open("r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
-        except (OSError, yaml.YAMLError):
+        except (OSError, yaml.YAMLError) as err:
+            logger.debug("Skipping unreadable Lutris YAML '%s': %s", file_path, err)
             return None
 
         if not isinstance(data, dict):
@@ -124,9 +132,11 @@ class LutrisProvider:
         # Extract game name / title
         name = self._resolve_game_name(data, game_dict, file_path)
 
-        # Extract slug and provider-specific application ID
-        raw_slug = data.get("slug") or data.get("game_slug") or file_path.stem
-        slug = str(raw_slug)
+        # Extract slug and provider-specific application ID (stripping trailing numeric suffix)
+        raw_slug = data.get("slug") or data.get("game_slug")
+        if not raw_slug:
+            raw_slug = re.sub(r"-\d+$", "", file_path.stem)
+        slug = str(raw_slug).strip()
 
         game_slug = data.get("game_slug")
         game_slug_str = str(game_slug) if game_slug else None
@@ -239,7 +249,6 @@ class LutrisProvider:
                         if target.is_file():
                             return target
 
-        # If no standalone icon found, banner/cover can serve as visual representation
         return None
 
     def _generate_asset_candidates(

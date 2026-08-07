@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -11,6 +13,8 @@ from typing import Any
 from gamedeck.models import Game
 
 __all__ = ["LutrisLauncher", "launch"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -37,21 +41,25 @@ class LutrisLauncher:
             ValueError: If the game has no valid slug or identifier.
             RuntimeError: If the Lutris executable is not found in PATH.
         """
-        slug = game.appid
-        if not slug:
-            slug = game.id.removeprefix("lutris_")
+        raw_slug = game.appid
+        if not raw_slug:
+            raw_slug = game.id.removeprefix("lutris_")
 
-        if not slug:
+        if not raw_slug:
             raise ValueError(f"Cannot launch Lutris game '{game.name}': Missing valid slug or appid.")
+
+        # Clean trailing numeric suffix to match Lutris game slug
+        slug = re.sub(r"-\d+$", "", str(raw_slug)).strip()
 
         executable = shutil.which(self.lutris_bin)
         if executable is None:
             # Fallback to xdg-open if lutris binary is not directly available
             xdg_open = shutil.which("xdg-open")
             if xdg_open is not None:
-                cmd = [xdg_open, f"lutris:rungame/{slug}"]
+                uri = f"lutris:rungame/{slug}"
+                logger.info("Spawning Lutris URI via xdg-open: %s", uri)
                 return subprocess.Popen(
-                    cmd,
+                    [xdg_open, uri],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     start_new_session=True,
@@ -64,6 +72,7 @@ class LutrisLauncher:
         if extra_args:
             cmd.extend(extra_args)
 
+        logger.info("Spawning Lutris process: %s", cmd)
         return subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
