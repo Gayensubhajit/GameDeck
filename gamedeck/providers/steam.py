@@ -16,7 +16,7 @@ __all__ = ["SteamProvider", "get_games"]
 
 logger = logging.getLogger(__name__)
 
-# Known Steam runtime components, compatibility tools, and redistributables
+# Known Steam runtime components, compatibility tools, dedicated servers, and redistributables
 KNOWN_RUNTIME_APPIDS: frozenset[str] = frozenset(
     {
         "228980",  # Steamworks Common Redistributables
@@ -38,6 +38,12 @@ KNOWN_RUNTIME_APPIDS: frozenset[str] = frozenset(
         "2180100",  # Proton Next
         "1887720",  # Proton EasyAntiCheat Runtime
         "1826330",  # Proton BattlEye Runtime
+        "211",  # Source SDK Base 2006
+        "212",  # Source SDK Base 2007
+        "213",  # Source SDK Base Singleplayer
+        "214",  # Source SDK Base Multiplayer
+        "215",  # Source SDK Base 2013 Singleplayer
+        "218",  # Source SDK Base 2013 Multiplayer
     }
 )
 
@@ -48,7 +54,8 @@ class SteamProvider:
 
     Reads Steam `libraryfolders.vdf` to detect all configured Steam library
     locations, parses individual `appmanifest_*.acf` files, and returns
-    `Game` model instances while filtering out Steam runtimes and tools.
+    `Game` model instances while filtering out Steam runtimes, compatibility tools,
+    dedicated servers, and non-game packages.
 
     Attributes:
         steam_roots: Base Steam installation directories to scan.
@@ -90,7 +97,7 @@ class SteamProvider:
         """Scan all Steam libraries and return a list of discovered games.
 
         Returns:
-            A list of Game model instances for all installed non-runtime Steam games.
+            A list of Game model instances for all installed real playable Steam games.
         """
         games: list[Game] = []
         seen_ids: set[str] = set()
@@ -171,7 +178,7 @@ class SteamProvider:
             steamapps_dir: The parent steamapps directory of the manifest.
 
         Returns:
-            A Game instance if valid and not a runtime/tool component, else None.
+            A Game instance if valid and not a runtime/tool/server component, else None.
         """
         try:
             with manifest_path.open("r", encoding="utf-8", errors="replace") as f:
@@ -202,7 +209,7 @@ class SteamProvider:
         # Extract installation directory name
         installdir = str(app_dict.get("installdir", "")).strip()
 
-        # Filter out runtimes, compatibility tools, and empty names
+        # Filter out runtimes, compatibility tools, dedicated servers, and packages
         if self._is_runtime_component(appid, name, installdir):
             return None
 
@@ -247,56 +254,96 @@ class SteamProvider:
         )
 
     def _is_runtime_component(self, appid: str, name: str, installdir: str) -> bool:
-        """Check if an application represents a Steam runtime, tool, or non-game component."""
-        if not name:
+        """Check if an application represents a runtime, server, compatibility tool, or non-game package."""
+        if not name or not name.strip():
             return True
 
         if appid in KNOWN_RUNTIME_APPIDS:
             return True
 
-        name_lower = name.lower()
-        installdir_lower = installdir.lower()
+        name_lower = name.lower().strip()
+        installdir_lower = installdir.lower().strip()
 
-        # Check Proton variations
+        # 1. Proton and Compatibility Tools
         if (
             name_lower == "proton"
             or name_lower.startswith("proton ")
             or "proton -" in name_lower
             or "proton experimental" in name_lower
             or "proton hotfix" in name_lower
+            or name_lower.endswith(" proton")
+            or "ge-proton" in name_lower
+            or "luxtorpeda" in name_lower
+            or "boxtron" in name_lower
+            or "roberta" in name_lower
+            or "compatibility tool" in name_lower
+            or "compatibility data" in name_lower
             or installdir_lower.startswith("proton")
+            or installdir_lower.startswith("ge-proton")
         ):
             return True
 
-        # Check Steam Linux Runtime variations
+        # 2. Steam Linux Runtime and Runtime Packages
         if (
             "steam linux runtime" in name_lower
             or "steamlinuxruntime" in installdir_lower
             or "steam runtime" in name_lower
+            or "steam_runtime" in installdir_lower
+            or name_lower.startswith("steam linux runtime")
+            or name_lower.startswith("steam runtime")
         ):
             return True
 
-        # Check Steamworks Redistributables and shared tools
+        # 3. Steamworks Common Redistributables and Shared SDKs
         if (
             "steamworks common redistributables" in name_lower
             or "steamworks shared" in installdir_lower
+            or "common redistributables" in name_lower
+            or "steamworks sdk" in name_lower
+            or "source sdk" in name_lower
+            or "source sdk base" in name_lower
+            or installdir_lower.startswith("source sdk")
         ):
             return True
 
-        # Check AntiCheat and VR runtimes
+        # 4. Dedicated Servers
         if (
-            "easyanticheat runtime" in name_lower
-            or "battleye runtime" in name_lower
+            "dedicated server" in name_lower
+            or "dedicated server" in installdir_lower
+            or name_lower.endswith(" dedicated server")
+            or name_lower.endswith(" server")
+            or installdir_lower.endswith("_server")
+            or installdir_lower.endswith(" server")
+        ):
+            return True
+
+        # 5. Anti-Cheat and VR Runtimes
+        if (
+            "easyanticheat" in name_lower
+            or "easy anti-cheat" in name_lower
+            or "battleye" in name_lower
+            or "eac_server" in name_lower
             or "steamvr" in name_lower
+            or name_lower.startswith("steamvr")
+            or "steam vr" in name_lower
             or installdir_lower.startswith("steamvr")
         ):
             return True
 
-        # Check generic client components and runtimes
+        # 6. Tools, Editors, Benchmarks, Soundtracks
         if (
             name_lower.startswith("steam client")
             or name_lower.startswith("directx")
             or name_lower.startswith("vulkan run time")
+            or name_lower.startswith("microsoft visual c++")
+            or name_lower.endswith(" benchmark")
+            or "creation kit" in name_lower
+            or "redmod" in name_lower
+            or " soundtrack" in name_lower
+            or " original soundtrack" in name_lower
+            or name_lower.endswith(" ost")
+            or " bonus content" in name_lower
+            or " artbook" in name_lower
         ):
             return True
 

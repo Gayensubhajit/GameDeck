@@ -6,6 +6,7 @@ import logging
 import subprocess
 from typing import Any, Protocol, runtime_checkable
 
+from gamedeck.launchers.heroic import HeroicLauncher
 from gamedeck.launchers.lutris import LutrisLauncher
 from gamedeck.launchers.native import NativeLauncher
 from gamedeck.launchers.steam import SteamLauncher
@@ -15,6 +16,7 @@ from gamedeck.models import Game
 __all__ = [
     "Launcher",
     "SteamLauncher",
+    "HeroicLauncher",
     "LutrisLauncher",
     "NativeLauncher",
     "WineLauncher",
@@ -52,7 +54,7 @@ def get_launcher(launcher_type: str) -> Launcher:
     """Resolve and return an instance of the appropriate launcher backend.
 
     Args:
-        launcher_type: Launcher identifier (e.g. 'steam', 'lutris', 'native', 'wine', 'proton').
+        launcher_type: Launcher identifier (e.g. 'steam', 'heroic', 'lutris', 'native', 'wine', 'proton').
 
     Returns:
         An instance of the corresponding launcher backend.
@@ -63,6 +65,8 @@ def get_launcher(launcher_type: str) -> Launcher:
     key = launcher_type.lower().strip()
     if key in ("steam",):
         return SteamLauncher()
+    if key in ("heroic",):
+        return HeroicLauncher()
     if key in ("lutris",):
         return LutrisLauncher()
     if key in ("native", "linux"):
@@ -77,7 +81,7 @@ def launch(game: Game, extra_args: list[str] | None = None, **kwargs: Any) -> su
     """Execute a game using its designated launcher backend.
 
     Dispatches execution to the corresponding launcher based on game.launcher
-    (Steam, Lutris, Native, or Wine) without touching provider code.
+    (Steam, Heroic, Lutris, Native, or Wine) without touching provider code.
 
     Args:
         game: Game model instance to execute.

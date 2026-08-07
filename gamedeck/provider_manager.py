@@ -10,7 +10,7 @@ from typing import Any, Callable
 from gamedeck.models import Game
 from gamedeck.providers import Provider
 
-__all__ = ["ProviderManager", "get_all_games", "PROVIDER_PRIORITY"]
+__all__ = ["ProviderManager", "get_all_games", "sort_games_with_recents", "PROVIDER_PRIORITY"]
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,40 @@ PROVIDER_PRIORITY: dict[str, int] = {
 }
 
 
+def sort_games_with_recents(games: list[Game], recent_limit: int = 5) -> list[Game]:
+    """Sort games prioritizing favorites first, recently played second, and alphabetical library third.
+
+    Args:
+        games: List of Game instances to sort.
+        recent_limit: Maximum number of recently played games to prioritize.
+
+    Returns:
+        Ordered list of Game model instances.
+    """
+    favorites: list[Game] = []
+    non_favorites: list[Game] = []
+
+    for g in games:
+        if g.favorite:
+            favorites.append(g)
+        else:
+            non_favorites.append(g)
+
+    # 1. Favorites sorted alphabetically
+    fav_sorted = sorted(favorites, key=lambda g: (g.name.lower().strip(), g.id))
+
+    # 2. Recently played games (with recorded last_played timestamp) sorted newest first
+    recents = [g for g in non_favorites if g.last_played is not None]
+    recents_sorted = sorted(recents, key=lambda g: str(g.last_played), reverse=True)[:recent_limit]
+    recent_ids = {g.id for g in recents_sorted}
+
+    # 3. Remaining games sorted alphabetically by title
+    library = [g for g in non_favorites if g.id not in recent_ids]
+    library_sorted = sorted(library, key=lambda g: (g.name.lower().strip(), g.id))
+
+    return fav_sorted + recents_sorted + library_sorted
+
+
 @dataclass(slots=True)
 class ProviderManager:
     """Manager for orchestrating game discovery across all enabled providers.
@@ -36,6 +70,7 @@ class ProviderManager:
     Attributes:
         enabled_providers: List of provider names to query (case-insensitive).
         custom_providers: Mapping of provider names to custom provider callables or instances.
+        recent_limit: Maximum number of recently played games to prioritize.
     """
 
     enabled_providers: list[str] = field(
@@ -44,6 +79,7 @@ class ProviderManager:
     custom_providers: dict[str, Callable[[], list[Game]] | Provider] = field(
         default_factory=dict
     )
+    recent_limit: int = 5
 
     def get_games(self) -> list[Game]:
         """Query all enabled providers and return a deduplicated, sorted list of games.
@@ -63,7 +99,7 @@ class ProviderManager:
         return merged
 
     def merge_and_deduplicate(self, games: list[Game]) -> list[Game]:
-        """Deduplicate games by unique identifier and name, applying provider precedence.
+        """Deduplicate games by unique identifier and name, applying provider precedence and recent sorting.
 
         When duplicate names or unique IDs exist, the game from the higher priority
         provider (Steam > Heroic > Lutris > Native > Filesystem) is retained.
@@ -72,7 +108,7 @@ class ProviderManager:
             games: Unfiltered list of Game instances from all providers.
 
         Returns:
-            A deduplicated list of Game instances sorted alphabetically by name.
+            A deduplicated list of Game instances sorted by Favorites -> Recents -> Alphabetical.
         """
         # Pass 1: Deduplicate by unique game id
         by_id: dict[str, Game] = {}
@@ -101,11 +137,8 @@ class ProviderManager:
                 if self._get_priority(game.source) > self._get_priority(existing.source):
                     by_title[title_key] = game
 
-        # Sort alphabetically by display title (case-insensitive) then by id
-        return sorted(
-            by_title.values(),
-            key=lambda g: (g.name.lower().strip(), g.id),
-        )
+        # Sort: Favorites -> Recently Played -> Alphabetical
+        return sort_games_with_recents(list(by_title.values()), recent_limit=self.recent_limit)
 
     def normalize_title(self, name: str) -> str:
         """Normalize game title for duplicate matching across different providers.
@@ -179,17 +212,14 @@ class ProviderManager:
 
 
 def get_all_games(enabled_providers: list[str] | None = None) -> list[Game]:
-    """Retrieve all discovered and deduplicated games across enabled providers.
+    """Retrieve all discovered, metadata-enriched, and deduplicated games across enabled providers.
 
     Args:
         enabled_providers: Optional list of provider names to query.
 
     Returns:
-        A sorted list of Game model instances.
+        A sorted list of Game model instances with favorites and recents prioritized.
     """
-    manager = ProviderManager(
-        enabled_providers=enabled_providers
-        if enabled_providers is not None
-        else ["steam", "heroic", "lutris", "native", "filesystem"]
-    )
-    return manager.get_games()
+    from gamedeck.scanner import scan_games
+
+    return scan_games(enabled_providers=enabled_providers)
