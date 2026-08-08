@@ -105,11 +105,13 @@ class CarouselStyle(CardStyle):
 
 @dataclass(slots=True)
 class DeckCardStyle(CardStyle):
-    """Console Deck style card matching gamepad console aesthetics."""
+    """Console Deck style card matching gamepad console aesthetics with big cover art."""
 
     name: str = "deck"
     aspect_ratio: str = "1:1"
-    icon_size_px: int = 160
+    icon_size_px: int = 190
+    show_badge: bool = False
+    show_favorite: bool = False
     preferred_artwork: str = "portrait"
 
 

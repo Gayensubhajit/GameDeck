@@ -509,14 +509,14 @@ class DeckView(LibraryView):
 }
 
 window {
-    width: 88%;
+    width: 94%;
     location: center;
     anchor: center;
     border: 1.5px solid;
-    border-color: #3b82f644;
+    border-color: #2563eb66;
     border-radius: 20px;
-    background-color: #040714f8;
-    padding: 22px;
+    background-color: #030612fa;
+    padding: 20px 24px;
 }
 
 mainbox {
@@ -526,18 +526,18 @@ mainbox {
 }
 
 inputbar {
-    background-color: #0b1329c0;
+    background-color: #080f24d0;
     border: 1px solid;
-    border-color: #3b82f644;
+    border-color: #2563eb44;
     border-radius: 14px;
-    padding: 12px 18px;
+    padding: 10px 18px;
     spacing: 14px;
     children: [ prompt, entry ];
 }
 
 prompt {
     text-color: #60a5fa;
-    font: "Outfit Bold 11";
+    font: "Outfit Bold 11.5";
     background-color: transparent;
 }
 
@@ -550,15 +550,15 @@ entry {
 }
 
 message {
-    background-color: #0b1329c0;
+    background-color: #080f24c0;
     border: 1px solid;
-    border-color: #3b82f633;
-    border-radius: 14px;
-    padding: 10px 18px;
+    border-color: #2563eb33;
+    border-radius: 12px;
+    padding: 8px 18px;
 }
 
 textbox {
-    text-color: #94a3b8;
+    text-color: #cbd5e1;
     font: "Outfit Medium 10";
     background-color: transparent;
 }
@@ -578,24 +578,24 @@ listview {
 element {
     orientation: vertical;
     children: [ element-icon, element-text ];
-    spacing: 8px;
-    padding: 12px;
+    spacing: 6px;
+    padding: 6px;
     border-radius: 14px;
-    background-color: #0e172fa0;
+    background-color: #0c142ba0;
     border: 1px solid;
     border-color: #1e293b80;
-    text-color: #e2e8f0;
+    text-color: #f8fafc;
 }
 
 element selected {
-    background-color: #2563eb30;
+    background-color: #1d4ed830;
     border: 2.5px solid;
     border-color: #3b82f6;
     text-color: #60a5fa;
 }
 
 element-icon {
-    size: 150px;
+    size: 175px;
     horizontal-align: 0.5;
     vertical-align: 0.5;
     border-radius: 10px;
@@ -609,6 +609,7 @@ element-text {
     font: "Outfit Bold 10.5";
     text-color: inherit;
     background-color: transparent;
+    padding: 4px 6px;
     cursor: pointer;
 }
 """
