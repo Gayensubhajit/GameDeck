@@ -331,8 +331,7 @@ class RofiUI:
                 cmd.extend([
                     "-kb-custom-2", "Control+1",
                     "-kb-custom-3", "Control+2",
-                    "-kb-custom-4", "Control+f",
-                    "-kb-custom-5", "F5",
+                    "-kb-custom-4", "F5",
                     "-mesg", "<b>Enter</b> Play  •  <b>Alt</b> Options  •  <b>Ctrl+1</b> List  •  <b>Ctrl+2</b> Grid  •  <b>Ctrl+F</b> Search  •  <b>Esc</b> Back  •  <b>F5</b> Refresh",
                 ])
 

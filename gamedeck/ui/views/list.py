@@ -152,8 +152,6 @@ class ListViewRenderer:
             "-kb-custom-3",
             "Control+2",
             "-kb-custom-4",
-            "Control+f",
-            "-kb-custom-5",
             "F5",
             "-mesg",
             STATUS_BAR_TEXT,

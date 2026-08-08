@@ -267,6 +267,15 @@ element-text {{
         mesg_parts.append(STATUS_BAR_TEXT)
         full_mesg = "\n".join(mesg_parts)
 
+        # Write grid theme to cache file for clean and reliable Rofi parsing
+        cache_dir = Path.home() / ".cache" / "gamedeck"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        theme_file = cache_dir / "grid_theme.rasi"
+        try:
+            theme_file.write_text(grid_theme, encoding="utf-8")
+        except Exception as err:
+            logger.debug("Failed to write grid theme cache: %s", err)
+
         cmd: list[str] = [
             executable,
             "-dmenu",
@@ -286,13 +295,11 @@ element-text {{
             "-kb-custom-3",
             "Control+2",
             "-kb-custom-4",
-            "Control+f",
-            "-kb-custom-5",
             "F5",
             "-mesg",
             full_mesg,
-            "-theme-str",
-            grid_theme,
+            "-theme",
+            str(theme_file),
         ]
 
         if theme_path:
