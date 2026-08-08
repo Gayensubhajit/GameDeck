@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from gamedeck.models import Game
+from gamedeck.search.tokenizer import tokenize as _search_tokenize
 from gamedeck.ui.artwork_resolver import ArtworkResolver
+from gamedeck.ui.views.base import LibraryView
 from gamedeck.ui.views.cards import CardStyle, get_card_style
 
 logger = logging.getLogger(__name__)
@@ -65,9 +67,12 @@ def calculate_responsive_columns(
 
 
 @dataclass(slots=True)
-class GridViewRenderer:
-    """Renders library games in a responsive artwork grid using Rofi."""
+class GridView(LibraryView):
+    """Renders library games in a responsive portrait artwork grid using Rofi."""
 
+    name: str = "grid"
+    display_name: str = "Grid View"
+    card_style: str = "portrait"
     columns: int = 5
     card_style_name: str = "portrait"
     artwork_resolver: ArtworkResolver = field(default_factory=ArtworkResolver)
@@ -394,3 +399,85 @@ element-text {{
             f"<b>Wine:</b> {wine_ver}  •  <b>Playtime:</b> {pt_str}  •  <b>Last Played:</b> {last_p}  •  <b>Date Added:</b> {date_add_str}\n"
             f"<b>Favorite:</b> {fav_str}  •  <b>Version:</b> {ver_str}  •  <b>Collections:</b> {colls_str}  •  <b>Tags:</b> {tags_str}  •  <b>Hero:</b> {hero_str}  •  <b>Logo:</b> {logo_str}"
         )
+
+
+# Backwards compatibility alias
+GridViewRenderer = GridView
+
+
+@dataclass(slots=True)
+class CompactView(LibraryView):
+    """Renders library games in a dense square grid (6–8 columns) for maximum information density."""
+
+    name: str = "compact"
+    display_name: str = "Compact View"
+    card_style: str = "compact"
+    columns: int = 7
+    card_style_name: str = "compact"
+    artwork_resolver: ArtworkResolver = field(default_factory=ArtworkResolver)
+    rofi_bin: str = "rofi"
+    accent_color: str = "#00e699"
+    secondary_action_key: str = "Alt+Return"
+
+    def render(self, *args: Any, **kwargs: Any) -> tuple[Game | Any | None, int, str]:
+        renderer = GridView(
+            columns=self.columns,
+            card_style_name=self.card_style_name,
+            artwork_resolver=self.artwork_resolver,
+            rofi_bin=self.rofi_bin,
+            accent_color=self.accent_color,
+            secondary_action_key=self.secondary_action_key,
+        )
+        return renderer.render(*args, **kwargs)
+
+
+@dataclass(slots=True)
+class HeroView(LibraryView):
+    """Renders library games in wide cinematic 21:9 hero banner cards (2–3 columns)."""
+
+    name: str = "hero"
+    display_name: str = "Hero View"
+    card_style: str = "hero"
+    columns: int = 3
+    card_style_name: str = "hero"
+    artwork_resolver: ArtworkResolver = field(default_factory=ArtworkResolver)
+    rofi_bin: str = "rofi"
+    accent_color: str = "#00e699"
+    secondary_action_key: str = "Alt+Return"
+
+    def render(self, *args: Any, **kwargs: Any) -> tuple[Game | Any | None, int, str]:
+        renderer = GridView(
+            columns=self.columns,
+            card_style_name=self.card_style_name,
+            artwork_resolver=self.artwork_resolver,
+            rofi_bin=self.rofi_bin,
+            accent_color=self.accent_color,
+            secondary_action_key=self.secondary_action_key,
+        )
+        return renderer.render(*args, **kwargs)
+
+
+@dataclass(slots=True)
+class CarouselView(LibraryView):
+    """Renders library games in horizontal 16:9 spotlight showcase cards."""
+
+    name: str = "carousel"
+    display_name: str = "Carousel View"
+    card_style: str = "carousel"
+    columns: int = 4
+    card_style_name: str = "carousel"
+    artwork_resolver: ArtworkResolver = field(default_factory=ArtworkResolver)
+    rofi_bin: str = "rofi"
+    accent_color: str = "#00e699"
+    secondary_action_key: str = "Alt+Return"
+
+    def render(self, *args: Any, **kwargs: Any) -> tuple[Game | Any | None, int, str]:
+        renderer = GridView(
+            columns=self.columns,
+            card_style_name=self.card_style_name,
+            artwork_resolver=self.artwork_resolver,
+            rofi_bin=self.rofi_bin,
+            accent_color=self.accent_color,
+            secondary_action_key=self.secondary_action_key,
+        )
+        return renderer.render(*args, **kwargs)

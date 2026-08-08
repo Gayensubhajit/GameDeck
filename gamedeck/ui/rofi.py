@@ -234,21 +234,21 @@ class RofiUI:
         vm = self._ensure_view_manager()
 
         while True:
-            # 1. Grid View Mode
-            if vm.active_mode == ViewMode.GRID:
-                grid_prompt = f"GameDeck  •  Library  •  Grid View  •  {len(games)} Games"
-                selected, ret_code, action_trigger = vm.grid_renderer.render(
+            # 1. Pluggable Graphic/Grid Views (Grid, Compact, Hero, Carousel)
+            if vm.active_mode != ViewMode.LIST:
+                active_view = vm.active_view
+                view_prompt = f"GameDeck  •  Library  •  {active_view.display_name}  •  {len(games)} Games"
+                selected, ret_code, action_trigger = vm.render(
                     games=games,
-                    prompt=grid_prompt,
+                    prompt=view_prompt,
                     theme_path=self.theme,
                     theme_str=self.theme_str,
                 )
 
-                if action_trigger == "switch_view_list":
-                    logger.info("User switched to List View via Ctrl+1")
-                    vm.switch_to_list()
-                    continue
-                elif action_trigger == "switch_view_grid":
+                if action_trigger.startswith("switch_view_"):
+                    target = action_trigger.replace("switch_view_", "")
+                    logger.info("User switched view to %s", target)
+                    vm.switch_to(target)
                     continue
                 elif action_trigger == "refresh":
                     return "NAV_STATS"
@@ -259,7 +259,7 @@ class RofiUI:
                 else:
                     return None
 
-            # 2. List View Mode
+            # 2. Classic List View Mode
             else:
                 use_custom_key = bool(self.secondary_action_key and self.enable_action_menu)
                 lines: list[str] = []

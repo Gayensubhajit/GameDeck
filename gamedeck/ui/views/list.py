@@ -15,13 +15,14 @@ from typing import Any
 
 from gamedeck.models import Game
 from gamedeck.search.tokenizer import tokenize as _search_tokenize
+from gamedeck.ui.views.base import LibraryView
 
 logger = logging.getLogger(__name__)
 
 STATUS_BAR_TEXT: str = (
-    "<b>Enter</b> Play  •  <b>Alt</b> Options  •  "
+    "<b>⏎ Enter</b> Play  •  <b>⎇ Alt</b> Menu  •  "
     "<b>Ctrl+1</b> List  •  <b>Ctrl+2</b> Grid  •  "
-    "<b>Ctrl+F</b> Search  •  <b>Esc</b> Back  •  <b>F5</b> Refresh"
+    "<b>Ctrl+F</b> Search  •  <b>⎋ Esc</b> Back  •  <b>F5</b> Refresh"
 )
 
 
@@ -31,9 +32,12 @@ def _calc_rofi_lines(count: int, max_lines: int = 12) -> str:
 
 
 @dataclass(slots=True)
-class ListViewRenderer:
-    """Renders library games in high-density linear list format."""
+class ListView(LibraryView):
+    """Renders library games in high-density linear list format with submenus."""
 
+    name: str = "list"
+    display_name: str = "List View"
+    card_style: str = "compact"
     rofi_bin: str = "rofi"
     show_icons: bool = True
     case_insensitive: bool = True
@@ -48,6 +52,7 @@ class ListViewRenderer:
         theme_path: Path | str | None = None,
         theme_str: str | None = None,
         resolve_icon_fn: Any = None,
+        **kwargs: Any,
     ) -> tuple[Game | Any | None, int, str]:
         """Display games in classic list view.
 
@@ -221,3 +226,7 @@ class ListViewRenderer:
             return (selected, ret_code, action_trigger)
 
         return (None, ret_code, "cancel")
+
+
+# Backwards compatibility alias
+ListViewRenderer = ListView
