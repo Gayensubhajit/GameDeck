@@ -10,8 +10,9 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+from gamedeck.events import ArtworkDownloaded, get_event_bus
 from gamedeck.models import Game
 
 __all__ = [
@@ -21,7 +22,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-ARTWORK_TYPES: frozenset[str] = frozenset({"icons", "logos", "heroes", "covers"})
+ARTWORK_TYPES: frozenset[str] = frozenset({"icons", "logos", "heroes", "covers", "capsules", "placeholders"})
 
 
 def get_default_artwork_cache_dir() -> Path:
@@ -33,39 +34,45 @@ def get_default_artwork_cache_dir() -> Path:
 
 @dataclass(slots=True)
 class ArtworkCache:
-    """Local filesystem artwork cache supporting icons, logos, heroes, and covers.
+    """Local filesystem artwork cache supporting heroes, covers, capsules, icons, logos, and placeholders.
 
     Provides non-blocking asset discovery, local caching, fallback resolution
-    to application icons, and asynchronous background fetching.
+    to application icons, and asynchronous background fetching with offline mode.
 
     Attributes:
         cache_dir: Root cache directory for local artwork storage.
         max_workers: Number of background worker threads for non-blocking downloads.
+        offline_mode: When True, prevents all remote network requests.
     """
 
     cache_dir: Path = field(default_factory=get_default_artwork_cache_dir)
-    max_workers: int = 2
+    max_workers: int = 3
+    offline_mode: bool = False
     _executor: concurrent.futures.ThreadPoolExecutor = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize cache subdirectories and background thread pool."""
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=self.max_workers,
-            thread_name_prefix="ArtworkFetcher",
+            thread_name_prefix="ArtworkPipeline",
         )
         self._init_directories()
 
     def _init_directories(self) -> None:
-        """Create artwork subdirectories for icons, logos, heroes, and covers."""
+        """Create artwork subdirectories for heroes, covers, capsules, icons, logos, and placeholders."""
         for art_type in ARTWORK_TYPES:
             (self.cache_dir / art_type).mkdir(parents=True, exist_ok=True)
+
+    def has_artwork(self, game_id: str, art_type: str) -> bool:
+        """Return True if artwork for this game and category is already cached on disk."""
+        return self.get_artwork(game_id, art_type) is not None
 
     def get_artwork(self, game_id: str, art_type: str) -> Path | None:
         """Retrieve local cached artwork file path for a game if it exists.
 
         Args:
             game_id: Unique game identifier.
-            art_type: Category ('icons', 'logos', 'heroes', 'covers').
+            art_type: Category ('heroes', 'covers', 'capsules', 'icons', 'logos', 'placeholders').
 
         Returns:
             Path to the cached image file, or None if not cached locally.
@@ -97,7 +104,7 @@ class ArtworkCache:
 
         Args:
             game_id: Unique game identifier.
-            art_type: Category ('icons', 'logos', 'heroes', 'covers').
+            art_type: Category ('heroes', 'covers', 'capsules', 'icons', 'logos', 'placeholders').
             source: Path to existing file on disk, raw image bytes, or URL.
             ext: Desired file extension (default '.jpg').
 
@@ -131,21 +138,48 @@ class ArtworkCache:
 
         return dest_file
 
-    def resolve_artwork(self, game: Game) -> Game:
-        """Enrich a Game model with cached icons, logos, heroes, and covers with graceful fallbacks.
+    def generate_placeholder(self, game: Game) -> Path:
+        """Generate a clean dark translucent placeholder card with game title and launcher badge.
 
-        If a specific artwork type is unavailable, it gracefully falls back in hierarchy:
-            - logo: cached logo -> game.logo -> cached icon -> game.icon
-            - hero: cached hero -> game.hero -> cached cover -> game.cover -> game.icon
-            - cover: cached cover -> game.cover -> cached hero -> game.hero -> game.icon
-            - icon: cached icon -> game.icon
-
-        Args:
-            game: Game model instance.
-
-        Returns:
-            The enriched Game instance with resolved artwork paths.
+        Never blocks UI rendering; writes an SVG placeholder card instantly.
         """
+        target_dir = self.cache_dir / "placeholders"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        dest_file = target_dir / f"{game.id}.svg"
+
+        if dest_file.is_file() and dest_file.stat().st_size > 0:
+            return dest_file
+
+        # Clean title for SVG rendering
+        safe_title = (game.name or "Game").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        launcher_badge = (game.launcher or game.source or "NATIVE").upper()
+        if len(safe_title) > 22:
+            safe_title = safe_title[:20] + "..."
+
+        svg_content = f"""<svg width="300" height="450" viewBox="0 0 300 450" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#182421" />
+      <stop offset="100%" stop-color="#0c1412" />
+    </linearGradient>
+  </defs>
+  <rect width="300" height="450" rx="16" fill="url(#bg_grad)" stroke="#00e699" stroke-width="2" stroke-opacity="0.3" />
+  <circle cx="150" cy="180" r="48" fill="#00e699" fill-opacity="0.15" />
+  <text x="150" y="192" font-family="Outfit, sans-serif" font-size="36" font-weight="bold" fill="#00e699" text-anchor="middle">🎮</text>
+  <text x="150" y="275" font-family="Outfit, sans-serif" font-size="18" font-weight="bold" fill="#f0fdf4" text-anchor="middle">{safe_title}</text>
+  <rect x="90" y="315" width="120" height="28" rx="6" fill="#00e699" fill-opacity="0.2" />
+  <text x="150" y="334" font-family="Outfit, sans-serif" font-size="12" font-weight="bold" fill="#00e699" text-anchor="middle">{launcher_badge}</text>
+</svg>"""
+
+        try:
+            dest_file.write_text(svg_content, encoding="utf-8")
+        except Exception as err:
+            logger.debug("Failed to write placeholder SVG for '%s': %s", game.id, err)
+
+        return dest_file
+
+    def resolve_artwork(self, game: Game) -> Game:
+        """Enrich a Game model with cached icons, logos, heroes, and covers with graceful fallbacks."""
         cached_icon = self.get_artwork(game.id, "icons")
         cached_logo = self.get_artwork(game.id, "logos")
         cached_hero = self.get_artwork(game.id, "heroes")
@@ -155,15 +189,15 @@ class ArtworkCache:
         if game.icon is None and cached_icon is not None:
             game.icon = cached_icon
 
-        # Resolve logo (falling back to icon if missing)
+        # Resolve logo
         if game.logo is None:
             game.logo = cached_logo or game.icon
 
-        # Resolve hero (falling back to cover then icon if missing)
+        # Resolve hero
         if game.hero is None:
             game.hero = cached_hero or cached_cover or game.cover or game.icon
 
-        # Resolve cover (falling back to hero then icon if missing)
+        # Resolve cover
         if game.cover is None:
             game.cover = cached_cover or cached_hero or game.hero or game.icon
 
@@ -174,21 +208,23 @@ class ArtworkCache:
         game_id: str,
         art_type: str,
         url: str,
+        on_complete: Callable[[str, str, Path], None] | None = None,
         timeout: float = 3.0,
     ) -> None:
         """Download artwork in a non-blocking background daemon thread without delaying startup.
 
         Args:
             game_id: Unique game identifier.
-            art_type: Category ('icons', 'logos', 'heroes', 'covers').
+            art_type: Category ('icons', 'logos', 'heroes', 'covers', 'capsules').
             url: Remote HTTP/HTTPS URL of the artwork image.
+            on_complete: Optional callback invoked with (game_id, art_type, file_path).
             timeout: Network request timeout in seconds.
         """
-        if not url or not url.startswith("http"):
+        if self.offline_mode or not url or not url.startswith("http"):
             return
 
         # Do not re-download if already cached locally
-        if self.get_artwork(game_id, art_type) is not None:
+        if self.has_artwork(game_id, art_type):
             return
 
         def _download_task() -> None:
@@ -202,8 +238,22 @@ class ArtworkCache:
                     ext = ".png" if "png" in content_type else ".jpg"
                     data = response.read()
                     if data:
-                        self.store_artwork(game_id, art_type, data, ext=ext)
+                        saved_path = self.store_artwork(game_id, art_type, data, ext=ext)
                         logger.info("Background downloaded %s for game '%s'", art_type, game_id)
+
+                        # Emit EventBus event
+                        try:
+                            bus = get_event_bus()
+                            bus.publish(ArtworkDownloaded(
+                                game_id=game_id,
+                                art_type=art_type,
+                                file_path=str(saved_path),
+                            ))
+                        except Exception as event_err:
+                            logger.debug("EventBus notification failed: %s", event_err)
+
+                        if on_complete:
+                            on_complete(game_id, art_type, saved_path)
             except Exception as err:
                 logger.debug("Non-critical background artwork fetch failed for '%s': %s", game_id, err)
 

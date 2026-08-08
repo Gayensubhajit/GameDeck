@@ -77,6 +77,28 @@ class TestSteamGridDBClient(unittest.TestCase):
         enriched = meta_mgr.enrich(game)
         self.assertIsNotNone(enriched)
 
+    def test_never_redownload_existing_artwork(self) -> None:
+        """Verify fetch_game_artwork_background returns early if all assets exist locally."""
+        game = Game(id="g_all_cached", name="Portal 2", source="steam", launcher="steam")
+        self.artwork_cache.store_artwork(game.id, "heroes", b"HERO", ext=".jpg")
+        self.artwork_cache.store_artwork(game.id, "covers", b"COVER", ext=".jpg")
+        self.artwork_cache.store_artwork(game.id, "icons", b"ICON", ext=".png")
+        self.artwork_cache.store_artwork(game.id, "logos", b"LOGO", ext=".png")
+
+        with patch.object(SteamGridDBClient, "search_game_id") as mock_search:
+            self.client.fetch_game_artwork_background(game)
+            mock_search.assert_not_called()
+
+    def test_offline_mode_skips_fetches(self) -> None:
+        """Verify offline mode skips all remote API searches and downloads."""
+        self.client.offline_mode = True
+        self.assertFalse(self.client.is_available())
+
+        game = Game(id="g_offline", name="Half-Life 2", source="steam", launcher="steam")
+        with patch.object(SteamGridDBClient, "search_game_id") as mock_search:
+            self.client.fetch_game_artwork_background(game)
+            mock_search.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

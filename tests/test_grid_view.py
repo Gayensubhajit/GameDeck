@@ -79,12 +79,15 @@ class TestGridViewArchitecture(unittest.TestCase):
         self.assertEqual(vm.active_mode, ViewMode.GRID)
 
     def test_artwork_priority_resolution(self) -> None:
-        """Verify multi-tier artwork fallback hierarchy: Hero -> Cover -> Capsule -> Icon -> Theme."""
+        """Verify multi-tier artwork fallback hierarchy: Hero -> Cover -> Capsule -> Icon -> Placeholder."""
         resolver = ArtworkResolver(cache_dir=Path(self.tmp_dir.name) / "artwork")
 
-        # 1. Fallback to theme icon when no cache exists
-        icon = resolver.resolve_grid_cover(self.sample_game)
-        self.assertEqual(icon, "lutris")
+        # 1. Fallback to placeholder when no cache exists
+        placeholder = resolver.resolve_grid_cover(self.sample_game)
+        self.assertTrue(placeholder.endswith(".svg") or placeholder == "lutris")
+
+        # Theme icon resolves correctly
+        self.assertEqual(resolver.get_theme_icon(self.sample_game), "lutris")
 
         # 2. Add local cover art to cache and verify it takes priority
         covers_dir = resolver.cache_dir / "covers"

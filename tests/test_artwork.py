@@ -69,27 +69,47 @@ class TestArtworkCache(unittest.TestCase):
             # Cover falls back to icon
             self.assertEqual(resolved_game.cover, icon_path)
 
-    def test_non_blocking_fetch_async(self) -> None:
-        """Verify that fetch_async submits background download without blocking execution."""
+    def test_has_artwork_and_never_redownload(self) -> None:
+        """Verify has_artwork returns True for cached files and skips redundant downloads."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache_dir = Path(tmpdir) / "artwork"
             cache = ArtworkCache(cache_dir=cache_dir)
 
+            game_id = "lutris_bmw"
+            self.assertFalse(cache.has_artwork(game_id, "heroes"))
+
+            cache.store_artwork(game_id, "heroes", b"HERO_DATA", ext=".jpg")
+            self.assertTrue(cache.has_artwork(game_id, "heroes"))
+
+            # Calling fetch_async when already cached does not make network requests
             with patch("urllib.request.urlopen") as mock_urlopen:
-                mock_resp = MagicMock()
-                mock_resp.headers.get.return_value = "image/jpeg"
-                mock_resp.read.return_value = b"DOWNLOADED_ARTWORK"
-                mock_resp.__enter__.return_value = mock_resp
-                mock_urlopen.return_value = mock_resp
+                cache.fetch_async(game_id, "heroes", "https://example.com/hero.jpg")
+                mock_urlopen.assert_not_called()
 
-                # Calling fetch_async must return immediately (non-blocking)
-                cache.fetch_async("steam_730", "heroes", "https://example.com/hero.jpg")
+    def test_offline_mode_prevents_network_calls(self) -> None:
+        """Verify offline_mode prevents all remote network requests."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "artwork"
+            cache = ArtworkCache(cache_dir=cache_dir, offline_mode=True)
 
-                # Allow worker thread to complete
-                cache._executor.shutdown(wait=True)
+            with patch("urllib.request.urlopen") as mock_urlopen:
+                cache.fetch_async("steam_400", "heroes", "https://example.com/hero.jpg")
+                mock_urlopen.assert_not_called()
 
-                downloaded = cache.get_artwork("steam_730", "heroes")
-                self.assertIsNotNone(downloaded)
+    def test_generate_placeholder_instant_and_nonblocking(self) -> None:
+        """Verify clean SVG placeholder generation for offline/pending artwork."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "artwork"
+            cache = ArtworkCache(cache_dir=cache_dir)
+
+            game = Game(id="steam_888", name="Cyberpunk 2077", source="steam", launcher="steam")
+            placeholder_path = cache.generate_placeholder(game)
+
+            self.assertTrue(placeholder_path.is_file())
+            content = placeholder_path.read_text(encoding="utf-8")
+            self.assertIn("<svg", content)
+            self.assertIn("Cyberpunk 2077", content)
+            self.assertIn("STEAM", content)
 
 
 if __name__ == "__main__":

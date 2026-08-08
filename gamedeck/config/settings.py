@@ -106,6 +106,7 @@ class UIConfig:
     default_view: str = "list"
     grid_columns: int = 5
     grid_card_style: str = "portrait"
+    offline_mode: bool = False
 
 
 @dataclass(slots=True)

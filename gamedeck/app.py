@@ -79,6 +79,12 @@ class GameDeck:
         if self.watcher is None:
             self.watcher = WatcherManager(scanner=self.scanner)
 
+        # Propagate offline_mode settings to artwork pipeline
+        if hasattr(self.settings, "ui") and hasattr(self.settings.ui, "offline_mode"):
+            self.metadata_manager.artwork_cache.offline_mode = self.settings.ui.offline_mode
+            if self.metadata_manager.steamgriddb:
+                self.metadata_manager.steamgriddb.offline_mode = self.settings.ui.offline_mode
+
         if self.ui is None:
             theme = self.settings.ui.rofi_theme if self.settings.ui.rofi_theme else None
             self.ui = RofiUI(

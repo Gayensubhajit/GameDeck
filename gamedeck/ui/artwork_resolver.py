@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from gamedeck.artwork import ArtworkCache
 from gamedeck.models import Game
 
 logger = logging.getLogger(__name__)
@@ -62,12 +63,11 @@ class ArtworkResolver:
 
     def resolve_grid_cover(self, game: Game, preferred_type: str = "portrait") -> str:
         """Resolve the best artwork for grid view display according to priority:
-        1. SteamGrid Hero (if preferred_type == 'hero')
-        2. SteamGrid Portrait / Cover
+        1. SteamGridDB Hero
+        2. SteamGridDB Portrait / Cover
         3. Steam Capsule
-        4. Game Icon
-        5. Executable Icon
-        6. Themed fallback placeholder
+        4. Executable Icon
+        5. Placeholder
         """
         cache_key = f"{game.id}:{preferred_type}"
         if cache_key in self._thumbnail_cache:
@@ -75,48 +75,51 @@ class ArtworkResolver:
             if not cached_path.startswith("/") or Path(cached_path).is_file():
                 return cached_path
 
-        # 1. Hero if preferred
-        if preferred_type == "hero":
-            hero_path = self.get_hero(game)
-            if hero_path:
-                self._thumbnail_cache[cache_key] = hero_path
-                return hero_path
+        # 1. SteamGridDB Hero
+        hero_path = self.get_hero(game)
+        if hero_path:
+            self._thumbnail_cache[cache_key] = hero_path
+            return hero_path
 
-        # 2. Portrait / Cover
+        # 2. SteamGridDB Portrait / Cover
         cover_path = self.get_cover(game)
         if cover_path:
             self._thumbnail_cache[cache_key] = cover_path
             return cover_path
 
-        # 3. Hero as fallback if cover was not found
-        hero_fallback = self.get_hero(game)
-        if hero_fallback:
-            self._thumbnail_cache[cache_key] = hero_fallback
-            return hero_fallback
-
-        # 4. Steam Capsule
+        # 3. Steam Capsule
         capsule_path = self.get_capsule(game)
         if capsule_path:
             self._thumbnail_cache[cache_key] = capsule_path
             return capsule_path
 
-        # 5. Game Icon
+        # 4. Executable Icon / Game Icon
         icon_path = self.get_icon(game)
         if icon_path:
             self._thumbnail_cache[cache_key] = icon_path
             return icon_path
 
-        # 6. Executable Icon
         if game.executable is not None:
             exe_icon = self._find_executable_icon(Path(game.executable))
             if exe_icon:
                 self._thumbnail_cache[cache_key] = exe_icon
                 return exe_icon
 
-        # 7. Desktop theme fallback
+        # 5. Placeholder
+        placeholder = self.get_placeholder(game)
+        if placeholder:
+            self._thumbnail_cache[cache_key] = placeholder
+            return placeholder
+
         fallback = self.get_theme_icon(game)
         self._thumbnail_cache[cache_key] = fallback
         return fallback
+
+    def get_placeholder(self, game: Game) -> str:
+        """Generate or retrieve a clean dark translucent placeholder card for the game."""
+        cache = ArtworkCache(cache_dir=self.cache_dir)
+        ph = cache.generate_placeholder(game)
+        return str(ph)
 
     def get_hero(self, game: Game) -> str | None:
         """Get hero banner artwork path if available."""
