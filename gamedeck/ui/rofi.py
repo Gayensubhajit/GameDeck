@@ -144,7 +144,7 @@ class RofiUI:
     matching: str = "fuzzy"
     sorting_method: str = "fzf"
     enable_action_menu: bool = True
-    quick_launch: bool = False
+    quick_launch: bool = True
     rofi_bin: str = "rofi"
     secondary_action_key: str = "Alt+Return"
     default_view: str = "list"

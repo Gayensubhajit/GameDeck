@@ -100,7 +100,7 @@ class UIConfig:
     rofi_theme: str = ""
     recent_games_limit: int = 5
     show_recently_played: bool = True
-    quick_launch: bool = False
+    quick_launch: bool = True
     secondary_action_key: str = "Alt+Return"
     steamgriddb_api_key: str = ""
     default_view: str = "list"

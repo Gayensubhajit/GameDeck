@@ -18,9 +18,9 @@ class TestQuickLaunchInteractionModel(unittest.TestCase):
         self.games = [self.game]
 
     def test_ui_config_defaults(self) -> None:
-        """Verify ui.quick_launch defaults to False."""
+        """Verify ui.quick_launch defaults to True (Enter launches immediately, Alt+Return opens action menu)."""
         cfg = UIConfig()
-        self.assertFalse(cfg.quick_launch)
+        self.assertTrue(cfg.quick_launch)
         self.assertEqual(cfg.secondary_action_key, "Alt+Return")
 
     def test_settings_from_dict_quick_launch(self) -> None:
