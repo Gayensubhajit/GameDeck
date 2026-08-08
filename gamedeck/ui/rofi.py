@@ -183,6 +183,186 @@ class RofiUI:
         """Switch active view mode to any supported pluggable view."""
         self._ensure_view_manager().switch_to(view_name)
 
+    def show_game_details(self, game: Game, metadata_cache: Any = None) -> None:
+        """Open a dedicated Rofi details overlay for a game (triggered by Ctrl+D).
+
+        Displays hero artwork, full metadata, tags, collections, and keyboard hints
+        in a wide glassmorphism Rofi dialog. No click required — pure keyboard flow.
+
+        Args:
+            game: The Game model to display details for.
+            metadata_cache: Optional MetadataCache for dynamic metadata lookup.
+        """
+        from gamedeck.details import GameDetailsProvider
+        from gamedeck.details import format_rofi_mesg
+
+        # Build full details
+        provider = GameDetailsProvider(metadata_cache=metadata_cache) if metadata_cache else GameDetailsProvider()
+        details = provider.get_details(game)
+
+        if details is None:
+            logger.warning("show_game_details: Could not resolve details for %s", game.id)
+            return
+
+        # Format playtime
+        hours = details.playtime_minutes // 60
+        mins = details.playtime_minutes % 60
+        pt_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+
+        # Infer platform
+        is_wine = (details.launcher or "").lower() in ("wine", "proton", "bottles")
+        plat_str = details.platform or ("Windows" if is_wine else "Linux")
+        wine_str = details.wine_version or ("Wine/Proton" if is_wine else "Native")
+
+        last_str = details.last_played[:19] if details.last_played else "Never"
+        date_str = (details.date_added or "")[:10] or "Unknown"
+        fav_icon = "★ Yes" if details.favorite else "☆ No"
+        tags_str = ", ".join(details.tags) if details.tags else "None"
+        colls_str = ", ".join(details.collections) if details.collections else "None"
+        notes_str = (details.notes or "No notes").strip()
+        exec_str = str(details.executable) if details.executable else "N/A"
+        launcher_badge = f"[{details.launcher.upper()}]" if details.launcher else "[NATIVE]"
+
+        # Build display lines for the details dialog
+        detail_lines = [
+            f"<b>🎮 Title</b>       {details.title}",
+            f"<b>🚀 Launcher</b>    {launcher_badge}",
+            f"<b>🖥 Platform</b>    {plat_str}",
+            f"<b>🍷 Runner</b>      {wine_str}",
+            f"<b>⏱ Playtime</b>    {pt_str}",
+            f"<b>📅 Last Played</b> {last_str}",
+            f"<b>➕ Date Added</b>  {date_str}",
+            f"<b>🔢 Launches</b>    {details.launch_count}",
+            f"<b>★  Favorite</b>    {fav_icon}",
+            f"<b>📁 Collections</b> {colls_str}",
+            f"<b>🏷 Tags</b>        {tags_str}",
+            f"<b>📝 Notes</b>       {notes_str}",
+            f"<b>⚙ Executable</b>  {exec_str}",
+        ]
+
+        details_rasi = """
+* {
+    background-color: transparent;
+    text-color: #e2e8f0;
+    font: "Outfit 11";
+}
+
+window {
+    width: 60%;
+    location: center;
+    anchor: center;
+    border: 1.5px solid;
+    border-color: #00e69966;
+    border-radius: 20px;
+    background-color: #0a1612fa;
+    padding: 24px;
+}
+
+mainbox {
+    spacing: 12px;
+    children: [ inputbar, message, listview ];
+    background-color: transparent;
+}
+
+inputbar {
+    background-color: #14201ce0;
+    border: 1px solid;
+    border-color: #00e69944;
+    border-radius: 12px;
+    padding: 10px 16px;
+    spacing: 12px;
+    children: [ prompt, entry ];
+}
+
+prompt {
+    text-color: #00e699;
+    font: "Outfit Bold 12";
+    background-color: transparent;
+}
+
+entry {
+    text-color: transparent;
+    placeholder: "";
+    background-color: transparent;
+}
+
+message {
+    background-color: #14201cc8;
+    border: 1px solid;
+    border-color: #00e69933;
+    border-radius: 12px;
+    padding: 10px 16px;
+}
+
+textbox {
+    text-color: #94a3b8;
+    font: "Outfit Regular 9.5";
+    background-color: transparent;
+}
+
+listview {
+    layout: vertical;
+    spacing: 4px;
+    cycle: false;
+    dynamic: false;
+    scrollbar: false;
+    background-color: transparent;
+}
+
+element {
+    orientation: horizontal;
+    padding: 7px 14px;
+    border-radius: 8px;
+    background-color: #14201ca0;
+    border: 1px solid;
+    border-color: #24383260;
+    text-color: #cbd5e1;
+}
+
+element selected {
+    background-color: #00e69920;
+    border: 1.5px solid;
+    border-color: #00e69980;
+    text-color: #e2e8f0;
+}
+
+element-text {
+    vertical-align: 0.5;
+    font: "Outfit Regular 10.5";
+    text-color: inherit;
+    background-color: transparent;
+    markup: true;
+}
+"""
+        executable = shutil.which(self.rofi_bin)
+        if executable is None:
+            return
+
+        cmd = [
+            executable,
+            "-dmenu",
+            "-p", f"  {details.title}",
+            "-mesg", f"<b>Enter</b> Close  •  <b>Ctrl+D</b> Back to Library",
+            "-no-custom",
+            "-markup-rows",
+            "-lines", str(min(len(detail_lines), 13)),
+            "-theme-str", details_rasi.strip(),
+        ]
+
+        try:
+            subprocess.run(
+                cmd,
+                input="\n".join(detail_lines) + "\n",
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError as err:
+            logger.error("show_game_details: Failed to launch Rofi details dialog: %s", err)
+
+
     def _get_base_cmd(self, prompt_text: str, lines_count: int) -> tuple[list[str], str]:
         """Construct standard command line arguments and executable path for Rofi."""
         executable = shutil.which(self.rofi_bin)
@@ -358,6 +538,9 @@ element-text {
                     logger.info("User switched view to %s", target)
                     vm.switch_to(target)
                     continue
+                elif action_trigger == "show_details" and selected is not None:
+                    self.show_game_details(selected, metadata_cache=self.db_cache)
+                    continue
                 elif action_trigger == "refresh":
                     return "NAV_STATS"
                 elif action_trigger == "action_menu" and selected is not None:
@@ -441,7 +624,11 @@ element-text {
                     "-kb-custom-2", "Control+1",
                     "-kb-custom-3", "Control+2",
                     "-kb-custom-4", "F5",
-                    "-mesg", "<b>Enter</b> Play  •  <b>Alt</b> Options  •  <b>Ctrl+1</b> List  •  <b>Ctrl+2</b> Grid  •  <b>Ctrl+F</b> Search  •  <b>Esc</b> Back  •  <b>F5</b> Refresh",
+                    "-kb-custom-5", "Control+d",
+                    "-kb-custom-6", "Control+3",
+                    "-kb-custom-7", "Control+4",
+                    "-mesg",
+                    "<b>Enter</b> Play  •  <b>Alt</b> Options  •  <b>Ctrl+1</b> List  •  <b>Ctrl+2</b> Grid  •  <b>Ctrl+3</b> Hero  •  <b>Ctrl+4</b> Compact  •  <b>Ctrl+D</b> Details  •  <b>Ctrl+F</b> Search  •  <b>F5</b> Refresh",
                 ])
 
                 input_payload = "\n".join(lines) + "\n"
@@ -472,6 +659,22 @@ element-text {
                     continue
                 elif result.returncode == 14:
                     return "NAV_STATS"
+                elif result.returncode == 15:
+                    # Ctrl+D — show details overlay for selected game, then loop back
+                    output_raw = result.stdout.strip()
+                    if output_raw.isdigit():
+                        idx_raw = int(output_raw) - nav_count
+                        if 0 <= idx_raw < len(games):
+                            self.show_game_details(games[idx_raw], metadata_cache=self.db_cache)
+                    continue
+                elif result.returncode == 16:
+                    logger.info("User requested Hero View via Ctrl+3")
+                    vm.switch_to("hero")
+                    continue
+                elif result.returncode == 17:
+                    logger.info("User requested Compact View via Ctrl+4")
+                    vm.switch_to("compact")
+                    continue
                 elif result.returncode not in (0, 10):
                     logger.debug("Rofi selection cancelled (returncode=%d)", result.returncode)
                     return None

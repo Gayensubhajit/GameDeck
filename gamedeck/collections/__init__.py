@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from gamedeck.database import MetadataCache
 from gamedeck.models import Game
@@ -26,6 +26,8 @@ __all__ = [
     "FilesystemCollectionGenerator",
     "WineCollectionGenerator",
     "HiddenCollectionGenerator",
+    "LinuxNativeCollectionGenerator",
+    "ControllerCollectionGenerator",
     "CollectionManager",
     "get_all_collections",
 ]
@@ -333,6 +335,75 @@ class HiddenCollectionGenerator(BaseCollectionGenerator):
 
 
 @dataclass(slots=True)
+class LinuxNativeCollectionGenerator(BaseCollectionGenerator):
+    """Generates collection for games natively running on Linux without compatibility layers."""
+
+    collection_id: str = "linux_native"
+    name: str = "Linux Native"
+    icon: str = "🐧"
+    description: str = "Games running natively on Linux without Wine or Proton"
+
+    def generate(self, all_games: list[Game], metadata_cache: MetadataCache) -> GameCollection:
+        _wine_launchers = {"wine", "proton", "bottles"}
+        matches = [
+            g for g in all_games
+            if (
+                (g.platform or "").lower() in ("linux", "linux native", "linux_native")
+                or (
+                    (g.source or "").lower() in ("native", "filesystem")
+                    and (g.launcher or "").lower() not in _wine_launchers
+                )
+            )
+        ]
+        matches.sort(key=lambda g: (g.name or "").lower())
+        return GameCollection(
+            id=self.collection_id,
+            name=self.name,
+            icon=self.icon,
+            description=self.description,
+            is_dynamic=True,
+            games=matches,
+        )
+
+
+@dataclass(slots=True)
+class ControllerCollectionGenerator(BaseCollectionGenerator):
+    """Generates collection for games known to have good controller support."""
+
+    collection_id: str = "controller"
+    name: str = "Controller"
+    icon: str = "🎮"
+    description: str = "Games with controller / gamepad support"
+
+    #: Keywords in game metadata that signal controller support.
+    _CONTROLLER_KEYWORDS: ClassVar[frozenset[str]] = frozenset(
+        {"controller", "gamepad", "joystick", "steam input", "xinput", "dinput"}
+    )
+
+    def generate(self, all_games: list[Game], metadata_cache: MetadataCache) -> GameCollection:
+        matches = []
+        for g in all_games:
+            # Check tags, notes, or platform for controller indicators
+            searchable = " ".join(filter(None, [
+                (g.notes or "").lower(),
+                (g.platform or "").lower(),
+                # Steam games have broad controller support by default
+                "controller" if (g.source or "").lower() == "steam" else "",
+            ]))
+            if any(kw in searchable for kw in self._CONTROLLER_KEYWORDS):
+                matches.append(g)
+        matches.sort(key=lambda g: (g.name or "").lower())
+        return GameCollection(
+            id=self.collection_id,
+            name=self.name,
+            icon=self.icon,
+            description=self.description,
+            is_dynamic=True,
+            games=matches,
+        )
+
+
+@dataclass(slots=True)
 class CollectionManager:
     """Manages dynamic and custom SQLite-persisted game collections.
 
@@ -358,6 +429,8 @@ class CollectionManager:
                 HeroicCollectionGenerator(),
                 NativeCollectionGenerator(),
                 WineCollectionGenerator(),
+                LinuxNativeCollectionGenerator(),
+                ControllerCollectionGenerator(),
                 FilesystemCollectionGenerator(),
                 HiddenCollectionGenerator(),
             ]

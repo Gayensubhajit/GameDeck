@@ -119,6 +119,55 @@ class GameDetails:
             f"<b>Favorite:</b> {fav_str}  •  <b>Collections:</b> {colls_str}  •  <b>Tags:</b> {tags_str}  •  <b>Hero:</b> {hero_str}  •  <b>Logo:</b> {logo_str}"
         )
 
+    def format_rofi_mesg(self) -> str:
+        """Return a compact single-line rich-text string for Rofi's -mesg status bar.
+
+        Designed to display live game details below the keyboard hint bar when a
+        game is selected. Uses Pango markup supported by Rofi's -mesg field.
+
+        Returns:
+            A Pango markup string suitable for passing to Rofi ``-mesg``.
+        """
+        launcher_badge = f"[{self.launcher.upper()}]" if self.launcher else "[NATIVE]"
+        fav_icon = "★" if self.favorite else "☆"
+        last_str = self.last_played[:10] if self.last_played else "Never"
+        hours = self.playtime_minutes // 60
+        mins = self.playtime_minutes % 60
+        pt_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+        is_wine_env = (
+            (self.source or "").lower() in ("steam", "lutris", "heroic", "wine", "filesystem")
+            or (self.launcher or "").lower() in ("wine", "proton", "bottles")
+        )
+        plat_str = self.platform or ("Windows" if is_wine_env else "Linux")
+        return (
+            f"<b>{self.title}</b>  {fav_icon}  •  "
+            f"<b>Launcher:</b> {launcher_badge}  <b>Platform:</b> {plat_str}  •  "
+            f"<b>Playtime:</b> {pt_str}  <b>Last Played:</b> {last_str}  •  "
+            f"<b>Launches:</b> {self.launch_count}"
+        )
+
+
+def format_rofi_mesg(game: "Game", metadata_cache: Any | None = None) -> str:  # noqa: F821
+    """Convenience function: produce a Rofi -mesg rich-text string for a Game.
+
+    Args:
+        game: The Game model to format.
+        metadata_cache: Optional MetadataCache for looking up dynamic metadata.
+
+    Returns:
+        Pango markup string suitable for Rofi ``-mesg``.
+    """
+    from gamedeck.details import GameDetailsProvider
+    provider = GameDetailsProvider(metadata_cache=metadata_cache) if metadata_cache else GameDetailsProvider()
+    details = provider.get_details(game)
+    if details is not None:
+        return details.format_rofi_mesg()
+    # Minimal fallback when details cannot be resolved
+    launcher_badge = f"[{game.launcher.upper()}]" if game.launcher else "[NATIVE]"
+    fav_icon = "★" if game.favorite else "☆"
+    return f"<b>{game.name}</b>  {fav_icon}  •  <b>Launcher:</b> {launcher_badge}  •  <b>Launches:</b> {game.launch_count}"
+
+
 
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "steam": "Steam",

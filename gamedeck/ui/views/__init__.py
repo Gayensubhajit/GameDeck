@@ -138,6 +138,18 @@ class ViewManager:
         self._views[view.name.lower()] = view
         logger.debug("Registered LibraryView '%s' (%s)", view.name, view.display_name)
 
+    def register_external_view(self, view: LibraryView) -> None:
+        """Register a LibraryView provided by an external plugin.
+
+        Views registered this way are immediately available via ViewManager.switch_to(),
+        the --view CLI flag, and all keyboard view-switching shortcuts.
+
+        Args:
+            view: A LibraryView instance from a BaseViewPlugin implementation.
+        """
+        self.register_view(view)
+        logger.info("Registered external view plugin: '%s' (%s)", view.name, view.display_name)
+
     def get_view(self, name: str | ViewMode) -> LibraryView | None:
         """Retrieve a registered LibraryView by name."""
         key = str(name).lower().replace("viewmode.", "")

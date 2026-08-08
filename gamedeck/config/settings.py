@@ -107,6 +107,9 @@ class UIConfig:
     grid_columns: int = 6
     grid_card_style: str = "deck"
     offline_mode: bool = False
+    artwork_refresh_interval_hours: int = 24
+    auto_detect_new_games: bool = True
+    thumbnail_cache: bool = True
 
 
 @dataclass(slots=True)

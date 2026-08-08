@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 STATUS_BAR_TEXT: str = (
     "<b>⏎ Enter</b> Play  •  <b>⎇ Alt</b> Menu  •  "
-    "<b>Ctrl+1</b> List  •  <b>Ctrl+2</b> Grid  •  "
-    "<b>Ctrl+F</b> Search  •  <b>⎋ Esc</b> Back  •  <b>F5</b> Refresh"
+    "<b>Ctrl+1</b> List  •  <b>Ctrl+2</b> Grid  •  <b>Ctrl+3</b> Hero  •  <b>Ctrl+4</b> Compact  •  "
+    "<b>Ctrl+D</b> Details  •  <b>Ctrl+F</b> Search  •  <b>⎋ Esc</b> Back  •  <b>F5</b> Refresh"
 )
 
 
@@ -244,7 +244,9 @@ element-text {{
         from gamedeck.search.tokenizer import tokenize as _search_tokenize
 
         for idx, game in enumerate(games):
-            card_label = card_style.format_card_label(game)
+            card_label = card_style.format_card_label(
+                game, playtime_minutes=getattr(game, "playtime_minutes", 0)
+            )
             name_map[card_label] = game
 
             # Multi-tier artwork resolution
@@ -317,6 +319,9 @@ element-text {{
             "-kb-custom-2", "Control+1",
             "-kb-custom-3", "Control+2",
             "-kb-custom-4", "F5",
+            "-kb-custom-5", "Control+d",
+            "-kb-custom-6", "Control+3",
+            "-kb-custom-7", "Control+4",
             "-mesg", full_mesg,
             "-theme", str(theme_file),
         ])
@@ -350,6 +355,17 @@ element-text {{
             return (None, 12, "switch_view_grid")
         elif ret_code == 14:
             return (None, 14, "refresh")
+        elif ret_code == 15:
+            # Ctrl+D — details overlay; return special trigger for caller to handle
+            if output.isdigit():
+                idx = int(output)
+                if 0 <= idx < len(games):
+                    return (games[idx], 15, "show_details")
+            return (None, 15, "show_details")
+        elif ret_code == 16:
+            return (None, 16, "switch_view_hero")
+        elif ret_code == 17:
+            return (None, 17, "switch_view_compact")
         elif ret_code not in (0, 10):
             return (None, ret_code, "cancel")
 

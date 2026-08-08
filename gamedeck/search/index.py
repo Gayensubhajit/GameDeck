@@ -48,6 +48,11 @@ _SCORE_SUB_TOKEN: float = 0.50     # query in any token
 _WORD_BONUS: float = 0.10          # all query words matched individually
 _WORD_BONUS_CAP: float = 0.99      # multi-word bonus never reaches 1.0
 
+# Engagement boosts applied after base scoring (additive, capped at 0.99)
+_BOOST_FAVORITE: float = 0.15      # user starred the game
+_BOOST_RECENT: float = 0.12        # has a last_played timestamp
+_BOOST_FREQUENT: float = 0.08      # launch_count > 5 (frequently played)
+
 
 @dataclass(slots=True)
 class SearchIndex:
@@ -82,12 +87,18 @@ class SearchIndex:
     # ------------------------------------------------------------------
 
     @classmethod
-    def build(cls, games: list[Game], tags_map: dict[str, list[str]] | None = None) -> SearchIndex:
+    def build(
+        cls,
+        games: list[Game],
+        tags_map: dict[str, list[str]] | None = None,
+        collections_map: dict[str, list[str]] | None = None,
+    ) -> SearchIndex:
         """Build a :class:`SearchIndex` from a list of games.
 
         Args:
             games: List of :class:`~gamedeck.models.Game` instances to index.
             tags_map: Optional dictionary mapping game.id to list of assigned tags.
+            collections_map: Optional dictionary mapping game.id to list of collection names.
 
         Returns:
             A populated :class:`SearchIndex` ready for querying.
@@ -95,10 +106,16 @@ class SearchIndex:
         idx = cls()
         for game in games:
             tags = tags_map.get(game.id) if tags_map else None
-            idx.add(game, tags=tags)
+            colls = collections_map.get(game.id) if collections_map else None
+            idx.add(game, tags=tags, collections=colls)
         return idx
 
-    def add(self, game: Game, tags: list[str] | None = None) -> None:
+    def add(
+        self,
+        game: Game,
+        tags: list[str] | None = None,
+        collections: list[str] | None = None,
+    ) -> None:
         """Add a single game to the index.
 
         Calling :meth:`build` is preferred when constructing from a batch.
@@ -106,6 +123,7 @@ class SearchIndex:
         Args:
             game: :class:`~gamedeck.models.Game` instance to index.
             tags: Optional list of assigned tag names.
+            collections: Optional list of collection names this game belongs to.
         """
         tokens = tokenize(
             name=game.name,
@@ -113,6 +131,8 @@ class SearchIndex:
             source=game.source,
             executable=game.executable,
             tags=tags,
+            collections=collections,
+            launcher=game.launcher,
         )
         normalized_title = normalize(game.name)
         # Collapse multi-space after normalize (split+join cleans up)
@@ -147,8 +167,19 @@ class SearchIndex:
         for game, tokens, normalized_title in self._entries:
             score, matched = self._score(q, tokens, normalized_title)
             if score > 0.0:
+                if score >= 1.0:
+                    boosted_score = 1.0
+                else:
+                    boost = 0.0
+                    if game.favorite:
+                        boost += _BOOST_FAVORITE
+                    if game.last_played:
+                        boost += _BOOST_RECENT
+                    if game.launch_count >= 5:
+                        boost += _BOOST_FREQUENT
+                    boosted_score = min(_WORD_BONUS_CAP, score + boost)
                 results.append(
-                    SearchResult(game=game, score=score, matched_tokens=matched)
+                    SearchResult(game=game, score=boosted_score, matched_tokens=matched)
                 )
 
         results.sort(key=lambda r: (-r.score, r.game.name.lower()))
@@ -157,6 +188,30 @@ class SearchIndex:
             results = results[:limit]
 
         return results
+
+    def search_in_collections(
+        self,
+        query: str,
+        collection_names: list[str],
+        limit: int = 0,
+    ) -> tuple[list[SearchResult], list[str]]:
+        """Search games AND collection names simultaneously.
+
+        Args:
+            query: Search string.
+            collection_names: List of collection display names to match against.
+            limit: Maximum results (0 = no cap).
+
+        Returns:
+            Tuple of (game_results, matched_collection_names).
+        """
+        game_results = self.search(query, limit=limit)
+        q = " ".join(normalize(query).split()).strip()
+        matched_colls = [
+            c for c in collection_names
+            if q in normalize(c)
+        ]
+        return game_results, matched_colls
 
     def __len__(self) -> int:
         """Return the number of indexed games."""

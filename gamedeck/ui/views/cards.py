@@ -25,13 +25,27 @@ class CardStyle:
     icon_size_px: int = 180
     show_badge: bool = True
     show_favorite: bool = True
+    show_playtime: bool = False
+    show_installed: bool = True
     orientation: str = "vertical"
     preferred_artwork: str = "portrait"
 
-    def format_card_label(self, game: Game) -> str:
-        """Format the card label with title, favorite star, and uppercase launcher badge."""
+    # Launcher badge color hints (used by themes; not rendered directly in label)
+    LAUNCHER_COLORS: ClassVar[dict[str, str]] = {
+        "steam": "#1b6fa8",
+        "lutris": "#f97316",
+        "heroic": "#d4a12a",
+        "native": "#00e699",
+        "wine": "#dc2626",
+        "proton": "#dc2626",
+        "bottles": "#9333ea",
+        "filesystem": "#64748b",
+    }
+
+    def format_card_label(self, game: Game, *, playtime_minutes: int = 0) -> str:
+        """Format the card label with title, favorite star, launcher badge, playtime, and installed indicator."""
         title = (game.name or "Unknown Game").strip()
-        fav_star = "★ " if game.favorite else ""
+        fav_star = "★ " if (self.show_favorite and game.favorite) else ""
 
         badge = ""
         if self.show_badge:
@@ -49,7 +63,21 @@ class CardStyle:
             badge_text = badge_map.get(raw_launcher, raw_launcher)
             badge = f"  [{badge_text}]"
 
-        return f"{fav_star}{title}{badge}"
+        # Installed dot indicator (• if installed, □ if not)
+        installed_dot = ""
+        if self.show_installed:
+            installed_dot = " •" if game.installed else " □"
+
+        # Compact playtime suffix (only when > 0 and enabled)
+        playtime_sfx = ""
+        if self.show_playtime:
+            total_mins = playtime_minutes or getattr(game, "playtime_minutes", 0)
+            if total_mins > 0:
+                hours = total_mins // 60
+                mins = total_mins % 60
+                playtime_sfx = f"  ⏱ {hours}h" if hours > 0 else f"  ⏱ {mins}m"
+
+        return f"{fav_star}{title}{badge}{installed_dot}{playtime_sfx}"
 
 
 @dataclass(slots=True)
@@ -59,6 +87,7 @@ class PortraitCardStyle(CardStyle):
     name: str = "portrait"
     aspect_ratio: str = "2:3"
     icon_size_px: int = 140
+    show_playtime: bool = True
     preferred_artwork: str = "portrait"
 
 
@@ -112,6 +141,7 @@ class DeckCardStyle(CardStyle):
     icon_size_px: int = 190
     show_badge: bool = False
     show_favorite: bool = False
+    show_installed: bool = False
     preferred_artwork: str = "portrait"
 
 

@@ -292,3 +292,124 @@ class MetadataManager:
                     return c
 
         return None
+
+    def enrich_background(
+        self,
+        game_ids: list[str],
+        *,
+        download_artwork: bool = True,
+    ) -> list[Game]:
+        """Non-blocking background enrichment of a subset of games by ID.
+
+        Designed to be called from a background thread after a scan detects
+        new games. Does not block the interactive UI.
+
+        Args:
+            game_ids: List of game IDs to enrich.
+            download_artwork: Whether to trigger SteamGridDB background downloads.
+
+        Returns:
+            List of enriched Game instances for the given IDs.
+        """
+        cached_games = self.metadata_cache.get_all_cached_games()
+        target_games = [g for g in cached_games if g.id in set(game_ids)]
+
+        for game in target_games:
+            try:
+                # Sync metadata from SQLite
+                self.metadata_cache.sync_game(game)
+                # Resolve local artwork
+                self.resolve_artwork(game)
+                # Queue SteamGridDB download if needed and enabled
+                if (
+                    download_artwork
+                    and self.steamgriddb is not None
+                    and self.steamgriddb.is_available()
+                    and (game.cover is None or game.hero is None)
+                ):
+                    self.steamgriddb.fetch_game_artwork_background(game)
+            except Exception as err:
+                import logging as _log
+                _log.getLogger(__name__).warning(
+                    "enrich_background: Failed to enrich game %s: %s", game.id, err
+                )
+
+        return target_games
+
+    def generate_thumbnails(
+        self,
+        games: list[Game],
+        size: tuple[int, int] = (190, 280),
+        *,
+        force: bool = False,
+    ) -> dict[str, Path]:
+        """Pre-scale artwork files to thumbnail dimensions for faster grid rendering.
+
+        Generated thumbnails are stored in the artwork cache directory under
+        'thumbnails/' and reused on subsequent renders. Skips games that already
+        have a cached thumbnail unless force=True.
+
+        Args:
+            games: List of Game instances to generate thumbnails for.
+            size: Thumbnail dimensions as (width, height).
+            force: If True, regenerate even if thumbnail already exists.
+
+        Returns:
+            Dict mapping game.id to the thumbnail Path for each successfully
+            processed game.
+        """
+        import shutil as _shutil
+
+        thumb_dir = Path.home() / ".cache" / "gamedeck" / "thumbnails"
+        thumb_dir.mkdir(parents=True, exist_ok=True)
+
+        results: dict[str, Path] = {}
+
+        for game in games:
+            source_art = game.cover or game.hero or game.icon
+            if source_art is None:
+                continue
+
+            source_path = Path(source_art)
+            if not source_path.is_file():
+                continue
+
+            thumb_name = f"{game.id}_{size[0]}x{size[1]}{source_path.suffix}"
+            thumb_path = thumb_dir / thumb_name
+
+            if thumb_path.is_file() and not force:
+                results[game.id] = thumb_path
+                continue
+
+            # Use ImageMagick's convert if available (lightweight, no Python deps)
+            convert_bin = _shutil.which("convert")
+            if convert_bin:
+                import subprocess as _sub
+                try:
+                    _sub.run(
+                        [
+                            convert_bin,
+                            str(source_path),
+                            "-resize", f"{size[0]}x{size[1]}^",
+                            "-gravity", "center",
+                            "-extent", f"{size[0]}x{size[1]}",
+                            str(thumb_path),
+                        ],
+                        capture_output=True,
+                        check=False,
+                        timeout=10,
+                    )
+                    if thumb_path.is_file():
+                        results[game.id] = thumb_path
+                        continue
+                except Exception:
+                    pass
+
+            # Fallback: copy source as-is (no resizing without convert)
+            try:
+                _shutil.copy2(source_path, thumb_path)
+                results[game.id] = thumb_path
+            except Exception:
+                pass
+
+        return results
