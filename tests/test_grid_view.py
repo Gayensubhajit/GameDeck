@@ -115,7 +115,7 @@ class TestGridViewArchitecture(unittest.TestCase):
         label = portrait.format_card_label(self.sample_game)
         self.assertTrue(label.startswith("★ "))
         self.assertIn("Black Myth - Wukong", label)
-        self.assertIn("[Lutris]", label)
+        self.assertIn("[LUTRIS]", label)
 
         compact = get_card_style("compact")
         self.assertIsInstance(compact, CompactCardStyle)
@@ -162,7 +162,7 @@ class TestGridViewArchitecture(unittest.TestCase):
 
         self.assertIn("Black Myth - Wukong", details_str)
         self.assertIn("Source:</b> Filesystem", details_str)
-        self.assertIn("Launcher:</b> lutris", details_str)
+        self.assertIn("Launcher:</b> [LUTRIS]", details_str)
         self.assertIn("Playtime:", details_str)
 
     @patch("subprocess.run")

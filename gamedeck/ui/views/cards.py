@@ -29,14 +29,20 @@ class CardStyle:
     preferred_artwork: str = "portrait"
 
     def format_card_label(self, game: Game) -> str:
-        """Format the card label with title, favorite star, and launcher badge."""
+        """Format the card label with title, favorite star, and uppercase launcher badge."""
         title = (game.name or "Unknown Game").strip()
         fav_star = "★ " if game.favorite else ""
 
         badge = ""
         if self.show_badge:
-            launcher_name = (game.launcher or game.source or "native").capitalize()
-            badge = f" [{launcher_name}]"
+            raw_launcher = (game.launcher or game.source or "native").upper().strip()
+            # Normalize common badge names
+            badge_map = {
+                "FILESYSTEM": "WINE" if getattr(game, "wine_version", None) else "NATIVE",
+                "COM.USEBOTTLES.BOTTLES": "BOTTLES",
+            }
+            badge_text = badge_map.get(raw_launcher, raw_launcher)
+            badge = f"  [{badge_text}]"
 
         return f"{fav_star}{title}{badge}"
 

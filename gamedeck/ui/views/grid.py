@@ -22,9 +22,9 @@ from gamedeck.ui.views.cards import CardStyle, get_card_style
 logger = logging.getLogger(__name__)
 
 STATUS_BAR_TEXT: str = (
-    "<b>Enter</b> Play  •  <b>Alt</b> Options  •  "
+    "<b>⏎ Enter</b> Play  •  <b>⎇ Alt</b> Menu  •  "
     "<b>Ctrl+1</b> List  •  <b>Ctrl+2</b> Grid  •  "
-    "<b>Ctrl+F</b> Search  •  <b>Esc</b> Back  •  <b>F5</b> Refresh"
+    "<b>Ctrl+F</b> Search  •  <b>⎋ Esc</b> Back  •  <b>F5</b> Refresh"
 )
 
 
@@ -366,17 +366,28 @@ element-text {{
     def _build_details_panel(self, game: Game) -> str:
         """Format a rich details panel string for the selected game."""
         source = (game.source or "unknown").capitalize()
-        launcher = game.launcher or "native"
-        platform = getattr(game, "platform", None) or "Linux"
+        launcher = (game.launcher or "native").upper()
+        platform = getattr(game, "platform", None) or "Linux Native"
         wine_ver = getattr(game, "wine_version", None) or "N/A"
         last_p = getattr(game, "last_played", None) or "Never"
         playtime = getattr(game, "playtime_minutes", 0) or 0
         hours = playtime // 60
         mins = playtime % 60
         pt_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+        fav_str = "★ Yes" if game.favorite else "No"
+        ver_str = getattr(game, "version", None) or "1.0"
+        exe_path = str(game.executable) if game.executable else "N/A"
+        install_dir = str(Path(game.executable).parent) if game.executable else "N/A"
+        tags_str = ", ".join(game.tags) if getattr(game, "tags", None) else "None"
+        colls_str = ", ".join(game.collections) if getattr(game, "collections", None) else "None"
+
+        hero_art = self.artwork_resolver.get_hero(game)
+        cover_art = self.artwork_resolver.get_cover(game)
+        art_path = hero_art or cover_art
+        art_info = f"<b>Artwork:</b> {Path(art_path).name}" if art_path else "<b>Artwork:</b> [Cached Icon]"
 
         return (
-            f"<b>{game.name}</b>  •  <b>Source:</b> {source}  •  <b>Launcher:</b> {launcher}  •  "
-            f"<b>Platform:</b> {platform}  •  <b>Wine:</b> {wine_ver}  •  "
-            f"<b>Playtime:</b> {pt_str}  •  <b>Last Played:</b> {last_p}"
+            f"<b>Title:</b> {game.name}  •  <b>Launcher:</b> [{launcher}]  •  <b>Source:</b> {source}  •  <b>Platform:</b> {platform}\n"
+            f"<b>Executable:</b> {exe_path}  •  <b>Install Path:</b> {install_dir}\n"
+            f"<b>Wine:</b> {wine_ver}  •  <b>Playtime:</b> {pt_str}  •  <b>Last Played:</b> {last_p}  •  <b>Favorite:</b> {fav_str}  •  <b>Version:</b> {ver_str}  •  <b>Tags:</b> {tags_str}  •  <b>Collections:</b> {colls_str}  •  {art_info}"
         )
