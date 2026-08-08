@@ -153,8 +153,8 @@ class TestGridViewArchitecture(unittest.TestCase):
 
         self.assertIn("accent: #00e699;", rasi)
         self.assertIn("columns: 5;", rasi)
-        self.assertIn("border-radius: 16px;", rasi)
-        self.assertIn("background-color: #0c1412f2;", rasi)
+        self.assertIn("border-radius: 18px;", rasi)
+        self.assertIn("background-color: #0c1412f4;", rasi)
         self.assertIn("element selected", rasi)
         self.assertIn("border-color: #00e699;", rasi)
 

@@ -36,10 +36,15 @@ class CardStyle:
         badge = ""
         if self.show_badge:
             raw_launcher = (game.launcher or game.source or "native").upper().strip()
-            # Normalize common badge names
             badge_map = {
                 "FILESYSTEM": "WINE" if getattr(game, "wine_version", None) else "NATIVE",
                 "COM.USEBOTTLES.BOTTLES": "BOTTLES",
+                "GOG-GALAXY": "GOG",
+                "RETROARCH": "RETROARCH",
+                "RPCS3": "RPCS3",
+                "PCSX2": "PCSX2",
+                "MOONLIGHT": "MOONLIGHT",
+                "SUNSHINE": "SUNSHINE",
             }
             badge_text = badge_map.get(raw_launcher, raw_launcher)
             badge = f"  [{badge_text}]"

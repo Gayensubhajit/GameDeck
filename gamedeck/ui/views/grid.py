@@ -106,11 +106,11 @@ window {{
     width: 84%;
     location: center;
     anchor: center;
-    border: 2px solid;
-    border-color: #00e69955;
-    border-radius: 16px;
-    background-color: #0c1412f2;
-    padding: 18px;
+    border: 1.5px solid;
+    border-color: #00e69944;
+    border-radius: 18px;
+    background-color: #0c1412f4;
+    padding: 20px;
 }}
 
 mainbox {{
@@ -120,12 +120,12 @@ mainbox {{
 }}
 
 inputbar {{
-    background-color: #14201cd0;
+    background-color: #14201ce0;
     border: 1px solid;
     border-color: #00e69944;
-    border-radius: 10px;
-    padding: 10px 14px;
-    spacing: 10px;
+    border-radius: 12px;
+    padding: 10px 16px;
+    spacing: 12px;
     children: [ prompt, entry ];
 }}
 
@@ -137,21 +137,23 @@ prompt {{
 
 entry {{
     text-color: #f0fdf4;
-    placeholder: "Type to search grid...";
+    font: "Outfit Regular 11";
+    placeholder: "Type to search grid (title, tags, launcher)...";
     placeholder-color: #64748b;
     background-color: transparent;
 }}
 
 message {{
-    background-color: #14201cb0;
+    background-color: #14201cc8;
     border: 1px solid;
     border-color: #00e69933;
-    border-radius: 10px;
-    padding: 10px 14px;
+    border-radius: 12px;
+    padding: 10px 16px;
 }}
 
 textbox {{
     text-color: #94a3b8;
+    font: "Outfit Regular 9.5";
     background-color: transparent;
 }}
 
@@ -172,8 +174,8 @@ element {{
     children: [ element-icon, element-text ];
     spacing: 8px;
     padding: 12px;
-    border-radius: 12px;
-    background-color: #14201ca0;
+    border-radius: 14px;
+    background-color: #14201ca6;
     border: 1px solid;
     border-color: #24383280;
     text-color: #cbd5e1;
@@ -198,7 +200,7 @@ element-icon {{
 element-text {{
     horizontal-align: 0.5;
     vertical-align: 0.5;
-    font: "Outfit Medium 10";
+    font: "Outfit SemiBold 10";
     text-color: inherit;
     background-color: transparent;
     cursor: pointer;

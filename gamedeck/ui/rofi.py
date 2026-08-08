@@ -214,13 +214,117 @@ class RofiUI:
         if self.show_icons:
             cmd.append("-show-icons")
 
+        base_dialog_rasi = """
+* {
+    background-color: transparent;
+    text-color: #e2e8f0;
+    font: "Outfit 11";
+    accent: #00e699;
+}
+
+window {
+    width: 52%;
+    location: center;
+    anchor: center;
+    border: 1.5px solid;
+    border-color: #00e69944;
+    border-radius: 18px;
+    background-color: #0c1412f6;
+    padding: 18px;
+}
+
+mainbox {
+    spacing: 12px;
+    children: [ inputbar, message, listview ];
+    background-color: transparent;
+}
+
+inputbar {
+    background-color: #14201ce0;
+    border: 1px solid;
+    border-color: #00e69944;
+    border-radius: 12px;
+    padding: 10px 16px;
+    spacing: 12px;
+    children: [ prompt, entry ];
+}
+
+prompt {
+    text-color: #00e699;
+    font: "Outfit Bold 11";
+    background-color: transparent;
+}
+
+entry {
+    text-color: #f0fdf4;
+    font: "Outfit Regular 11";
+    placeholder: "Type to filter options...";
+    placeholder-color: #64748b;
+    background-color: transparent;
+}
+
+message {
+    background-color: #14201cc8;
+    border: 1px solid;
+    border-color: #00e69933;
+    border-radius: 12px;
+    padding: 10px 16px;
+}
+
+textbox {
+    text-color: #94a3b8;
+    font: "Outfit Regular 9.5";
+    background-color: transparent;
+}
+
+listview {
+    layout: vertical;
+    spacing: 6px;
+    cycle: true;
+    dynamic: true;
+    scrollbar: false;
+    background-color: transparent;
+}
+
+element {
+    orientation: horizontal;
+    children: [ element-icon, element-text ];
+    spacing: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background-color: #14201ca0;
+    border: 1px solid;
+    border-color: #24383260;
+    text-color: #cbd5e1;
+}
+
+element selected {
+    background-color: #00e69926;
+    border: 1.5px solid;
+    border-color: #00e699;
+    text-color: #00e699;
+}
+
+element-icon {
+    size: 22px;
+    vertical-align: 0.5;
+    background-color: transparent;
+}
+
+element-text {
+    vertical-align: 0.5;
+    font: "Outfit Medium 10.5";
+    text-color: inherit;
+    background-color: transparent;
+}
+"""
         if self.theme is not None:
             cmd.extend(["-theme", str(self.theme)])
-
-        if self.theme_str is not None and self.theme_str.strip():
+        elif self.theme_str is not None and self.theme_str.strip():
             cmd.extend(["-theme-str", self.theme_str.strip()])
+        else:
+            cmd.extend(["-theme-str", base_dialog_rasi.strip()])
 
-        cmd.extend(["-theme-str", 'entry { placeholder: ""; }'])
         return cmd, executable
 
     def select(

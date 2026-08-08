@@ -164,14 +164,116 @@ class ListView(LibraryView):
 
         if self.case_insensitive:
             cmd.append("-i")
-        if self.show_icons:
-            cmd.append("-show-icons")
+        base_list_rasi = """
+* {
+    background-color: transparent;
+    text-color: #e2e8f0;
+    font: "Outfit 11";
+    accent: #00e699;
+}
+
+window {
+    width: 62%;
+    location: center;
+    anchor: center;
+    border: 1.5px solid;
+    border-color: #00e69944;
+    border-radius: 18px;
+    background-color: #0c1412f4;
+    padding: 18px;
+}
+
+mainbox {
+    spacing: 12px;
+    children: [ inputbar, message, listview ];
+    background-color: transparent;
+}
+
+inputbar {
+    background-color: #14201ce0;
+    border: 1px solid;
+    border-color: #00e69944;
+    border-radius: 12px;
+    padding: 10px 16px;
+    spacing: 12px;
+    children: [ prompt, entry ];
+}
+
+prompt {
+    text-color: #00e699;
+    font: "Outfit Bold 11";
+    background-color: transparent;
+}
+
+entry {
+    text-color: #f0fdf4;
+    font: "Outfit Regular 11";
+    placeholder: "Type to search library (title, tag, launcher)...";
+    placeholder-color: #64748b;
+    background-color: transparent;
+}
+
+message {
+    background-color: #14201cc8;
+    border: 1px solid;
+    border-color: #00e69933;
+    border-radius: 12px;
+    padding: 8px 14px;
+}
+
+textbox {
+    text-color: #94a3b8;
+    font: "Outfit Regular 9.5";
+    background-color: transparent;
+}
+
+listview {
+    layout: vertical;
+    spacing: 6px;
+    cycle: true;
+    dynamic: true;
+    scrollbar: false;
+    background-color: transparent;
+}
+
+element {
+    orientation: horizontal;
+    children: [ element-icon, element-text ];
+    spacing: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background-color: #14201ca0;
+    border: 1px solid;
+    border-color: #24383260;
+    text-color: #cbd5e1;
+}
+
+element selected {
+    background-color: #00e69926;
+    border: 1.5px solid;
+    border-color: #00e699;
+    text-color: #00e699;
+}
+
+element-icon {
+    size: 24px;
+    vertical-align: 0.5;
+    background-color: transparent;
+}
+
+element-text {
+    vertical-align: 0.5;
+    font: "Outfit Medium 10.5";
+    text-color: inherit;
+    background-color: transparent;
+}
+"""
         if theme_path is not None:
             cmd.extend(["-theme", str(theme_path)])
-        if theme_str is not None and theme_str.strip():
+        elif theme_str is not None and theme_str.strip():
             cmd.extend(["-theme-str", theme_str.strip()])
-
-        cmd.extend(["-theme-str", 'entry { placeholder: "Type to search..."; }'])
+        else:
+            cmd.extend(["-theme-str", base_list_rasi.strip()])
 
         input_payload = "\n".join(lines) + "\n"
 
