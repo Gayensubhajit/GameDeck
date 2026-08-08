@@ -230,15 +230,16 @@ class RofiUI:
         if not games:
             return None
 
-        prompt_str = prompt or self.prompt or "GameDeck > Library"
+        prompt_str = prompt or f"GameDeck  •  Library  •  Grid View  •  {len(games)} Games"
         vm = self._ensure_view_manager()
 
         while True:
             # 1. Grid View Mode
             if vm.active_mode == ViewMode.GRID:
+                grid_prompt = f"GameDeck  •  Library  •  Grid View  •  {len(games)} Games"
                 selected, ret_code, action_trigger = vm.grid_renderer.render(
                     games=games,
-                    prompt=prompt_str,
+                    prompt=grid_prompt,
                     theme_path=self.theme,
                     theme_str=self.theme_str,
                 )
