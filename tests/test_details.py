@@ -98,6 +98,26 @@ class TestGameDetailsSystem(unittest.TestCase):
         self.assertIn("Launcher:     lutris", summary)
         self.assertIn("Favorite:     No", summary)
 
+    def test_formatted_panel(self) -> None:
+        """Verify formatted panel includes all 15 metadata fields."""
+        game = Game(
+            id="lutris_bmw",
+            name="Black Myth: Wukong",
+            source="lutris",
+            launcher="lutris",
+            appid="bmw",
+            favorite=True,
+            playtime_minutes=145,
+        )
+        details = self.provider.get_details(game)
+        panel = details.formatted_panel()
+        self.assertIn("Black Myth: Wukong", panel)
+        self.assertIn("[LUTRIS]", panel)
+        self.assertIn("Playtime:</b> 2h 25m", panel)
+        self.assertIn("Favorite:</b> ★ Yes", panel)
+        self.assertIn("Hero:</b>", panel)
+        self.assertIn("Logo:</b>", panel)
+
     def test_unknown_game_returns_none(self) -> None:
         """Verify querying non-existent game ID returns None gracefully."""
         details = self.provider.get_details("non_existent_game_id")

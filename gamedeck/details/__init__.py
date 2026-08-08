@@ -54,7 +54,7 @@ class GameDetails:
         exec_str = str(self.executable) if self.executable else "None"
         install_str = str(self.install_path) if self.install_path else "None"
         
-        is_wine_env = (self.source or "").lower() in ("steam", "lutris", "heroic", "wine") or (self.launcher or "").lower() in ("wine", "proton", "bottles")
+        is_wine_env = (self.source or "").lower() in ("steam", "lutris", "heroic", "wine", "filesystem") or (self.launcher or "").lower() in ("wine", "proton", "bottles")
         plat_str = self.platform or ("Windows (Proton/Wine)" if is_wine_env else "Linux Native")
         wine_str = self.wine_version or ("Wine-GE / Proton" if is_wine_env else "N/A")
         ver_str = self.version or "1.0"
@@ -86,6 +86,37 @@ class GameDetails:
             f"Hero Banner:  {hero_str}\n"
             f"Logo Art:     {logo_str}\n"
             f"Icon Path:    {icon_str}"
+        )
+
+    def formatted_panel(self) -> str:
+        """Format a live rich details panel string with all metadata fields and artwork fallbacks."""
+        launcher_badge = f"[{self.launcher.upper()}]" if self.launcher else "[NATIVE]"
+        fav_str = "★ Yes" if self.favorite else "No"
+        last_str = self.last_played[:19] if self.last_played else "Never"
+        date_add_str = (self.date_added or "Recently Added")[:10]
+        
+        hours = self.playtime_minutes // 60
+        mins = self.playtime_minutes % 60
+        pt_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+        
+        is_wine_env = (self.source or "").lower() in ("steam", "lutris", "heroic", "wine", "filesystem") or (self.launcher or "").lower() in ("wine", "proton", "bottles")
+        plat_str = self.platform or ("Windows (Wine/Proton)" if is_wine_env else "Linux Native")
+        wine_str = self.wine_version or ("Wine-GE / Proton" if is_wine_env else "N/A")
+        ver_str = self.version or "1.0"
+        
+        exec_str = str(self.executable) if self.executable else "N/A"
+        install_str = str(self.install_path) if self.install_path else "N/A"
+        tags_str = ", ".join(self.tags) if self.tags else "None"
+        colls_str = ", ".join(self.collections) if self.collections else "None"
+        
+        hero_str = str(self.hero.name) if self.hero else "[Fallback Icon]"
+        logo_str = str(self.logo.name) if self.logo else "[Fallback Icon]"
+
+        return (
+            f"<b>Title:</b> {self.title}  •  <b>Launcher:</b> {launcher_badge}  •  <b>Platform:</b> {plat_str}  •  <b>Wine:</b> {wine_str}\n"
+            f"<b>Executable:</b> {exec_str}  •  <b>Install Path:</b> {install_str}\n"
+            f"<b>Version:</b> {ver_str}  •  <b>Playtime:</b> {pt_str}  •  <b>Last Played:</b> {last_str}  •  <b>Date Added:</b> {date_add_str}\n"
+            f"<b>Favorite:</b> {fav_str}  •  <b>Collections:</b> {colls_str}  •  <b>Tags:</b> {tags_str}  •  <b>Hero:</b> {hero_str}  •  <b>Logo:</b> {logo_str}"
         )
 
 

@@ -370,6 +370,7 @@ element-text {{
         platform = getattr(game, "platform", None) or "Linux Native"
         wine_ver = getattr(game, "wine_version", None) or "N/A"
         last_p = getattr(game, "last_played", None) or "Never"
+        date_add_str = (getattr(game, "date_added", None) or "Recently Added")[:10]
         playtime = getattr(game, "playtime_minutes", 0) or 0
         hours = playtime // 60
         mins = playtime % 60
@@ -382,12 +383,14 @@ element-text {{
         colls_str = ", ".join(game.collections) if getattr(game, "collections", None) else "None"
 
         hero_art = self.artwork_resolver.get_hero(game)
+        logo_art = getattr(game, "logo", None)
         cover_art = self.artwork_resolver.get_cover(game)
-        art_path = hero_art or cover_art
-        art_info = f"<b>Artwork:</b> {Path(art_path).name}" if art_path else "<b>Artwork:</b> [Cached Icon]"
+        hero_str = Path(hero_art).name if hero_art else (Path(cover_art).name if cover_art else "[Fallback Icon]")
+        logo_str = Path(logo_art).name if logo_art else "[Fallback Icon]"
 
         return (
             f"<b>Title:</b> {game.name}  •  <b>Launcher:</b> [{launcher}]  •  <b>Source:</b> {source}  •  <b>Platform:</b> {platform}\n"
             f"<b>Executable:</b> {exe_path}  •  <b>Install Path:</b> {install_dir}\n"
-            f"<b>Wine:</b> {wine_ver}  •  <b>Playtime:</b> {pt_str}  •  <b>Last Played:</b> {last_p}  •  <b>Favorite:</b> {fav_str}  •  <b>Version:</b> {ver_str}  •  <b>Tags:</b> {tags_str}  •  <b>Collections:</b> {colls_str}  •  {art_info}"
+            f"<b>Wine:</b> {wine_ver}  •  <b>Playtime:</b> {pt_str}  •  <b>Last Played:</b> {last_p}  •  <b>Date Added:</b> {date_add_str}\n"
+            f"<b>Favorite:</b> {fav_str}  •  <b>Version:</b> {ver_str}  •  <b>Collections:</b> {colls_str}  •  <b>Tags:</b> {tags_str}  •  <b>Hero:</b> {hero_str}  •  <b>Logo:</b> {logo_str}"
         )
