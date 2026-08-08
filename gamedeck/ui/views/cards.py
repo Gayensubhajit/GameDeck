@@ -47,7 +47,7 @@ class PortraitCardStyle(CardStyle):
 
     name: str = "portrait"
     aspect_ratio: str = "2:3"
-    icon_size_px: int = 200
+    icon_size_px: int = 140
     preferred_artwork: str = "portrait"
 
 

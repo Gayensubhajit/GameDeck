@@ -91,61 +91,63 @@ class GridViewRenderer:
 
         base_rasi = f"""
 * {{
+    background-color: transparent;
+    text-color: #e2e8f0;
     font: "Outfit 11";
     accent: {self.accent_color};
-    bg-glass: #101816f0;
-    bg-card: #182421c0;
-    bg-card-selected: #00e69940;
-    border-subtle: #00e69933;
-    fg-main: #f0fdf4;
-    fg-muted: #94a3b8;
 }}
 
 window {{
-    width: 82%;
+    width: 84%;
+    location: center;
+    anchor: center;
     border: 2px solid;
-    border-color: @border-subtle;
+    border-color: #00e69955;
     border-radius: 16px;
-    background-color: @bg-glass;
-    padding: 16px;
+    background-color: #0c1412f2;
+    padding: 18px;
 }}
 
 mainbox {{
-    spacing: 12px;
+    spacing: 14px;
     children: [ inputbar, message, listview ];
+    background-color: transparent;
 }}
 
 inputbar {{
-    background-color: #0a1210d0;
+    background-color: #14201cd0;
     border: 1px solid;
-    border-color: @border-subtle;
+    border-color: #00e69944;
     border-radius: 10px;
     padding: 10px 14px;
+    spacing: 10px;
     children: [ prompt, entry ];
 }}
 
 prompt {{
-    text-color: @accent;
+    text-color: #00e699;
     font: "Outfit Bold 11";
-    padding: 0px 8px 0px 0px;
+    background-color: transparent;
 }}
 
 entry {{
-    text-color: @fg-main;
+    text-color: #f0fdf4;
     placeholder: "Type to search grid...";
-    placeholder-color: @fg-muted;
+    placeholder-color: #64748b;
+    background-color: transparent;
 }}
 
 message {{
+    background-color: #14201cb0;
     border: 1px solid;
-    border-color: @border-subtle;
-    border-radius: 8px;
-    background-color: #0c1412a0;
-    padding: 8px 12px;
+    border-color: #00e69933;
+    border-radius: 10px;
+    padding: 10px 14px;
 }}
 
 textbox {{
-    text-color: @fg-muted;
+    text-color: #94a3b8;
+    background-color: transparent;
 }}
 
 listview {{
@@ -153,9 +155,10 @@ listview {{
     lines: {lines_count};
     layout: vertical;
     fixed-columns: true;
-    spacing: 12px;
+    spacing: 14px;
     cycle: true;
     dynamic: true;
+    scrollbar: false;
     background-color: transparent;
 }}
 
@@ -165,29 +168,34 @@ element {{
     spacing: 8px;
     padding: 12px;
     border-radius: 12px;
-    background-color: @bg-card;
+    background-color: #14201ca0;
     border: 1px solid;
-    border-color: #ffffff0d;
+    border-color: #24383280;
+    text-color: #cbd5e1;
 }}
 
 element selected {{
-    background-color: @bg-card-selected;
+    background-color: #00e69926;
     border: 2px solid;
-    border-color: @accent;
-    text-color: #ffffff;
+    border-color: #00e699;
+    text-color: #00e699;
 }}
 
 element-icon {{
     size: {icon_size}px;
     horizontal-align: 0.5;
+    vertical-align: 0.5;
     border-radius: 8px;
+    background-color: transparent;
     cursor: pointer;
 }}
 
 element-text {{
     horizontal-align: 0.5;
+    vertical-align: 0.5;
     font: "Outfit Medium 10";
-    text-color: @fg-main;
+    text-color: inherit;
+    background-color: transparent;
     cursor: pointer;
 }}
 """

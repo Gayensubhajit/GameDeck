@@ -151,9 +151,9 @@ class TestGridViewArchitecture(unittest.TestCase):
         self.assertIn("accent: #00e699;", rasi)
         self.assertIn("columns: 5;", rasi)
         self.assertIn("border-radius: 16px;", rasi)
-        self.assertIn("bg-glass: #101816f0;", rasi)
+        self.assertIn("background-color: #0c1412f2;", rasi)
         self.assertIn("element selected", rasi)
-        self.assertIn("border-color: @accent;", rasi)
+        self.assertIn("border-color: #00e699;", rasi)
 
     def test_grid_renderer_details_panel_formatting(self) -> None:
         """Verify rich details panel formats launcher, platform, playtime, and wine version."""
