@@ -93,18 +93,18 @@ class GridViewRenderer:
 * {{
     font: "Outfit 11";
     accent: {self.accent_color};
-    bg-glass: rgba(16, 24, 22, 0.78);
-    bg-card: rgba(24, 36, 33, 0.65);
-    bg-card-hover: rgba(0, 230, 153, 0.18);
-    bg-card-selected: rgba(0, 230, 153, 0.28);
-    border-subtle: rgba(0, 230, 153, 0.22);
+    bg-glass: #101816f0;
+    bg-card: #182421c0;
+    bg-card-selected: #00e69940;
+    border-subtle: #00e69933;
     fg-main: #f0fdf4;
     fg-muted: #94a3b8;
 }}
 
 window {{
     width: 82%;
-    border: 2px solid @border-subtle;
+    border: 2px solid;
+    border-color: @border-subtle;
     border-radius: 16px;
     background-color: @bg-glass;
     padding: 16px;
@@ -116,8 +116,9 @@ mainbox {{
 }}
 
 inputbar {{
-    background-color: rgba(10, 18, 16, 0.85);
-    border: 1px solid @border-subtle;
+    background-color: #0a1210d0;
+    border: 1px solid;
+    border-color: @border-subtle;
     border-radius: 10px;
     padding: 10px 14px;
     children: [ prompt, entry ];
@@ -136,9 +137,10 @@ entry {{
 }}
 
 message {{
-    border: 1px solid @border-subtle;
+    border: 1px solid;
+    border-color: @border-subtle;
     border-radius: 8px;
-    background-color: rgba(12, 20, 18, 0.6);
+    background-color: #0c1412a0;
     padding: 8px 12px;
 }}
 
@@ -164,12 +166,14 @@ element {{
     padding: 12px;
     border-radius: 12px;
     background-color: @bg-card;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid;
+    border-color: #ffffff0d;
 }}
 
 element selected {{
     background-color: @bg-card-selected;
-    border: 2px solid @accent;
+    border: 2px solid;
+    border-color: @accent;
     text-color: #ffffff;
 }}
 
