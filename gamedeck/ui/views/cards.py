@@ -103,8 +103,19 @@ class CarouselStyle(CardStyle):
     preferred_artwork: str = "hero"
 
 
+@dataclass(slots=True)
+class DeckCardStyle(CardStyle):
+    """Console Deck style card matching gamepad console aesthetics."""
+
+    name: str = "deck"
+    aspect_ratio: str = "1:1"
+    icon_size_px: int = 160
+    preferred_artwork: str = "portrait"
+
+
 CARD_STYLES: dict[str, CardStyle] = {
     "portrait": PortraitCardStyle(),
+    "deck": DeckCardStyle(),
     "compact": CompactCardStyle(),
     "landscape": LandscapeCardStyle(),
     "hero": HeroCardStyle(),

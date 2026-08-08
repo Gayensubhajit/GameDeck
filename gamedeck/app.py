@@ -203,8 +203,8 @@ class GameDeck:
         )
         parser.add_argument(
             "--view",
-            choices=["list", "grid", "compact", "hero", "carousel"],
-            help="Select presentation view mode ('list', 'grid', 'compact', 'hero', 'carousel')",
+            choices=["list", "grid", "deck", "compact", "hero", "carousel"],
+            help="Select presentation view mode ('list', 'grid', 'deck', 'compact', 'hero', 'carousel')",
         )
         parser.add_argument(
             "--grid",

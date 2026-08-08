@@ -27,6 +27,7 @@ class ViewMode(str, Enum):
 
     LIST = "list"
     GRID = "grid"
+    DECK = "deck"
     COMPACT = "compact"
     HERO = "hero"
     CAROUSEL = "carousel"

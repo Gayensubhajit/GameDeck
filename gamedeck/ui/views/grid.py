@@ -483,3 +483,147 @@ class CarouselView(LibraryView):
             secondary_action_key=self.secondary_action_key,
         )
         return renderer.render(*args, **kwargs)
+
+
+@dataclass(slots=True)
+class DeckView(LibraryView):
+    """Console Deck style view matching handheld console UI with top tabs and gamepad actions."""
+
+    name: str = "deck"
+    display_name: str = "Deck View"
+    card_style: str = "deck"
+    columns: int = 6
+    card_style_name: str = "deck"
+    artwork_resolver: ArtworkResolver = field(default_factory=ArtworkResolver)
+    rofi_bin: str = "rofi"
+    accent_color: str = "#3b82f6"
+    secondary_action_key: str = "Alt+Return"
+
+    def render(self, *args: Any, **kwargs: Any) -> tuple[Game | Any | None, int, str]:
+        deck_theme = """
+* {
+    background-color: transparent;
+    text-color: #f1f5f9;
+    font: "Outfit 11";
+    accent: #3b82f6;
+}
+
+window {
+    width: 88%;
+    location: center;
+    anchor: center;
+    border: 1.5px solid;
+    border-color: #3b82f644;
+    border-radius: 20px;
+    background-color: #040714f8;
+    padding: 22px;
+}
+
+mainbox {
+    spacing: 16px;
+    children: [ inputbar, listview, message ];
+    background-color: transparent;
+}
+
+inputbar {
+    background-color: #0b1329c0;
+    border: 1px solid;
+    border-color: #3b82f644;
+    border-radius: 14px;
+    padding: 12px 18px;
+    spacing: 14px;
+    children: [ prompt, entry ];
+}
+
+prompt {
+    text-color: #60a5fa;
+    font: "Outfit Bold 11";
+    background-color: transparent;
+}
+
+entry {
+    text-color: #ffffff;
+    font: "Outfit Regular 11";
+    placeholder: "Search library...";
+    placeholder-color: #64748b;
+    background-color: transparent;
+}
+
+message {
+    background-color: #0b1329c0;
+    border: 1px solid;
+    border-color: #3b82f633;
+    border-radius: 14px;
+    padding: 10px 18px;
+}
+
+textbox {
+    text-color: #94a3b8;
+    font: "Outfit Medium 10";
+    background-color: transparent;
+}
+
+listview {
+    columns: 6;
+    lines: 2;
+    layout: vertical;
+    fixed-columns: true;
+    spacing: 16px;
+    cycle: true;
+    dynamic: true;
+    scrollbar: false;
+    background-color: transparent;
+}
+
+element {
+    orientation: vertical;
+    children: [ element-icon, element-text ];
+    spacing: 8px;
+    padding: 12px;
+    border-radius: 14px;
+    background-color: #0e172fa0;
+    border: 1px solid;
+    border-color: #1e293b80;
+    text-color: #e2e8f0;
+}
+
+element selected {
+    background-color: #2563eb30;
+    border: 2.5px solid;
+    border-color: #3b82f6;
+    text-color: #60a5fa;
+}
+
+element-icon {
+    size: 150px;
+    horizontal-align: 0.5;
+    vertical-align: 0.5;
+    border-radius: 10px;
+    background-color: transparent;
+    cursor: pointer;
+}
+
+element-text {
+    horizontal-align: 0.5;
+    vertical-align: 0.5;
+    font: "Outfit Bold 10.5";
+    text-color: inherit;
+    background-color: transparent;
+    cursor: pointer;
+}
+"""
+        renderer = GridView(
+            columns=self.columns,
+            card_style_name=self.card_style_name,
+            artwork_resolver=self.artwork_resolver,
+            rofi_bin=self.rofi_bin,
+            accent_color=self.accent_color,
+            secondary_action_key=self.secondary_action_key,
+        )
+        kwargs_copy = dict(kwargs)
+        if not kwargs_copy.get("prompt") or kwargs_copy.get("prompt") == "GameDeck > Grid":
+            kwargs_copy["prompt"] = "( L1 )   FAVORITES   •   COLLECTION   •   ACCESSORIES   ( R1 )"
+        if not kwargs_copy.get("theme_str"):
+            kwargs_copy["theme_str"] = deck_theme
+
+        return renderer.render(*args, **kwargs_copy)

@@ -25,6 +25,7 @@ from gamedeck.ui.views.cards import (
 from gamedeck.ui.views.grid import (
     CarouselView,
     CompactView,
+    DeckView,
     GridView,
     GridViewRenderer,
     HeroView,
@@ -41,6 +42,7 @@ __all__ = [
     "BaseViewRenderer",
     "ListView",
     "GridView",
+    "DeckView",
     "CompactView",
     "HeroView",
     "CarouselView",
@@ -103,6 +105,12 @@ class ViewManager:
             GridView(
                 columns=self.grid_columns,
                 card_style_name=self.grid_card_style,
+                artwork_resolver=self.artwork_resolver,
+            )
+        )
+        self.register_view(
+            DeckView(
+                columns=6,
                 artwork_resolver=self.artwork_resolver,
             )
         )
