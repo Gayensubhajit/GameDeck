@@ -179,6 +179,10 @@ class RofiUI:
         """Switch active view mode to Grid View."""
         self._ensure_view_manager().switch_to_grid()
 
+    def switch_to_view(self, view_name: str | ViewMode) -> None:
+        """Switch active view mode to any supported pluggable view."""
+        self._ensure_view_manager().switch_to(view_name)
+
     def _get_base_cmd(self, prompt_text: str, lines_count: int) -> tuple[list[str], str]:
         """Construct standard command line arguments and executable path for Rofi."""
         executable = shutil.which(self.rofi_bin)

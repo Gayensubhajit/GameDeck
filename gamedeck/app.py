@@ -203,8 +203,8 @@ class GameDeck:
         )
         parser.add_argument(
             "--view",
-            choices=["list", "grid", "carousel"],
-            help="Select presentation view mode ('list' or 'grid')",
+            choices=["list", "grid", "compact", "hero", "carousel"],
+            help="Select presentation view mode ('list', 'grid', 'compact', 'hero', 'carousel')",
         )
         parser.add_argument(
             "--grid",
@@ -214,12 +214,12 @@ class GameDeck:
 
         args, _ = parser.parse_known_args(argv)
 
-        if getattr(args, "grid", False) or getattr(args, "view", None) == "grid":
+        if getattr(args, "grid", False):
             if self.ui is not None:
                 self.ui.switch_to_grid()
-        elif getattr(args, "view", None) == "list":
+        elif getattr(args, "view", None):
             if self.ui is not None:
-                self.ui.switch_to_list()
+                self.ui.switch_to_view(args.view)
 
         if self.scanner is None:
             return 1
