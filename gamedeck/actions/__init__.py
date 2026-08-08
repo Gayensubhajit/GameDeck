@@ -520,17 +520,7 @@ class NativeActionProvider(BaseActionProvider):
                 )
             )
 
-        # 3. Open binary folder
-        if game.executable is not None:
-            actions.append(
-                GameAction(
-                    id="browse_files",
-                    label="Open Folder",
-                    handler=lambda g: _open_folder(Path(g.executable) if g.executable else None),
-                    icon="📁",
-                    description="Open binary folder",
-                )
-            )
+        # 3. Open binary folder — uses same id as universal provider so registry deduplicates it
 
         return actions
 
@@ -575,17 +565,7 @@ class FilesystemActionProvider(BaseActionProvider):
             )
         )
 
-        # 2. Open Folder
-        if game.executable is not None:
-            actions.append(
-                GameAction(
-                    id="open_folder",
-                    label="Open Folder",
-                    handler=lambda g: _open_folder(Path(g.executable) if g.executable else None),
-                    icon="📁",
-                    description="Open game directory in file manager",
-                )
-            )
+        # 2. Open Folder — handled universally by UniversalActionProvider (deduped by registry)
 
         return actions
 

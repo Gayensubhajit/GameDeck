@@ -352,6 +352,22 @@ class MetadataCache:
                 (datetime.now(timezone.utc).isoformat(),),
             )
 
+        # Migration 7: ui_state table to persist active view preference
+        if 7 not in applied_versions:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ui_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (7, ?)",
+                (datetime.now(timezone.utc).isoformat(),),
+            )
+
     # ------------------------------------------------------------------
     # Incremental Provider Change Detection & Library Cache
     # ------------------------------------------------------------------
@@ -980,6 +996,28 @@ class MetadataCache:
                 (limit,),
             )
             return [row["id"] for row in cursor.fetchall()]
+
+    def get_ui_state(self, key: str, default: str | None = None) -> str | None:
+        """Retrieve a stored UI state value by key."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT value FROM ui_state WHERE key = ?", (key,))
+            row = cursor.fetchone()
+            if row is not None:
+                return row["value"]
+            return default
+
+    def set_ui_state(self, key: str, value: str) -> None:
+        """Store or update a UI state value by key."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO ui_state (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                """,
+                (key, value, now),
+            )
 
 
 # ---------------------------------------------------------------------------

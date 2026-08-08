@@ -95,7 +95,7 @@ class TestGameActionsSystem(unittest.TestCase):
         action_ids = [a.id for a in actions]
 
         self.assertIn("launch", action_ids)
-        self.assertIn("browse_files", action_ids)
+        self.assertIn("open_folder", action_ids)
 
     def test_filesystem_actions(self) -> None:
         """Verify Filesystem/Wine actions: Play, Open Folder."""

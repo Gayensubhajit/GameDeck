@@ -12,8 +12,26 @@ from pathlib import Path
 from typing import Any
 
 from gamedeck.models import Game
+from gamedeck.ui.artwork_resolver import ArtworkResolver, FALLBACK_ICON, THEME_ICONS
+from gamedeck.ui.views import (
+    CardStyle,
+    GridViewRenderer,
+    ListViewRenderer,
+    ViewManager,
+    ViewMode,
+    get_card_style,
+)
 
-__all__ = ["RofiUI", "show_menu", "select_game", "generate_search_metadata"]
+__all__ = [
+    "RofiUI",
+    "show_menu",
+    "select_game",
+    "generate_search_metadata",
+    "ViewMode",
+    "ViewManager",
+    "GridViewRenderer",
+    "ListViewRenderer",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +40,6 @@ _ACTION_ORDER: tuple[str, ...] = (
     "launch",
     "toggle_favorite",
     "open_folder",
-    "browse_files",
     "select_profile",
     "configure",
     "browse_prefix",
@@ -130,6 +147,37 @@ class RofiUI:
     quick_launch: bool = False
     rofi_bin: str = "rofi"
     secondary_action_key: str = "Alt+Return"
+    default_view: str = "list"
+    grid_columns: int = 5
+    grid_card_style: str = "portrait"
+    db_cache: Any = None
+    view_manager: ViewManager | None = None
+
+    def _ensure_view_manager(self) -> ViewManager:
+        """Initialize or retrieve the ViewManager instance."""
+        if self.view_manager is None:
+            resolver = ArtworkResolver()
+            self.view_manager = ViewManager(
+                default_view=self.default_view,
+                grid_columns=self.grid_columns,
+                grid_card_style=self.grid_card_style,
+                artwork_resolver=resolver,
+                db_cache=self.db_cache,
+            )
+        return self.view_manager
+
+    @property
+    def active_view_mode(self) -> ViewMode:
+        """Get the current active view mode."""
+        return self._ensure_view_manager().active_mode
+
+    def switch_to_list(self) -> None:
+        """Switch active view mode to List View."""
+        self._ensure_view_manager().switch_to_list()
+
+    def switch_to_grid(self) -> None:
+        """Switch active view mode to Grid View."""
+        self._ensure_view_manager().switch_to_grid()
 
     def _get_base_cmd(self, prompt_text: str, lines_count: int) -> tuple[list[str], str]:
         """Construct standard command line arguments and executable path for Rofi."""
@@ -178,131 +226,178 @@ class RofiUI:
         custom_collections: list[Any] | None = None,
         prompt: str | None = None,
     ) -> Game | Any | None:
-        """Display the list of games in Rofi and return the user's selection."""
+        """Display games in the user's preferred view (List or Grid) and return selection."""
         if not games:
             return None
 
         prompt_str = prompt or self.prompt or "GameDeck > Library"
-        use_custom_key = bool(self.secondary_action_key and self.enable_action_menu)
+        vm = self._ensure_view_manager()
 
-        lines: list[str] = []
-        name_map: dict[str, Game] = {}
-        nav_by_index: list[Any] = []
+        while True:
+            # 1. Grid View Mode
+            if vm.active_mode == ViewMode.GRID:
+                selected, ret_code, action_trigger = vm.grid_renderer.render(
+                    games=games,
+                    prompt=prompt_str,
+                    theme_path=self.theme,
+                    theme_str=self.theme_str,
+                )
 
-        def _append_nav(
-            display: str,
-            marker: str,
-            payload: Any,
-            *,
-            meta: str | None = None,
-        ) -> None:
-            parts = [display, f"info\x1f{marker}"]
-            if meta:
-                parts.append(f"meta\x1f{meta}")
-            lines.append(f"{parts[0]}\0{'\x1f'.join(parts[1:])}")
-            nav_by_index.append(payload)
-
-        # Main menu top navigation submenus
-        _append_nav(
-            "📁  Collections...",
-            "nav_collections",
-            "NAV_COLLECTIONS",
-            meta="collections library provider steam lutris heroic custom",
-        )
-        _append_nav(
-            "🏷  Filter by Tag...",
-            "nav_tags",
-            "NAV_TAGS",
-            meta="tags rpg soulslike fps indie coop finished wishlist",
-        )
-        _append_nav(
-            "📊  Library Stats",
-            "nav_stats",
-            "NAV_STATS",
-            meta="stats statistics playtime launches favorites total library",
-        )
-
-        nav_count = len(lines)
-
-        for idx, game in enumerate(games):
-            base_title = game.name.strip() if game.name else f"Game #{idx + 1}"
-            display_title = f"★  {base_title}" if game.favorite else base_title
-            name_map[display_title] = game
-
-            meta_keywords = generate_search_metadata(
-                name=game.name,
-                appid=game.appid,
-                source=game.source,
-                game=game,
-            )
-
-            icon_spec = self.resolve_game_icon(game) if self.show_icons else None
-
-            parts = [display_title, f"meta\x1f{meta_keywords}", f"info\x1fgame:{idx}"]
-            if icon_spec:
-                parts.insert(1, f"icon\x1f{icon_spec}")
-
-            line = f"{parts[0]}\0{'\x1f'.join(parts[1:])}"
-            lines.append(line)
-
-        cmd, _ = self._get_base_cmd(prompt_str, len(lines))
-
-        if not use_custom_key:
-            cmd.append("-no-custom")
-        else:
-            cmd.extend(["-kb-custom-1", self.secondary_action_key])
-
-        input_payload = "\n".join(lines) + "\n"
-        logger.debug("Opening Rofi menu with %d nav items and %d games", nav_count, len(games))
-
-        try:
-            result = subprocess.run(
-                cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
-            )
-        except OSError as err:
-            logger.error("Failed to execute Rofi process: %s", err)
-            raise RuntimeError(f"Failed to execute Rofi: {err}") from err
-
-        if result.returncode not in (0, 10):
-            logger.debug("Rofi selection cancelled (returncode=%d)", result.returncode)
-            return None
-
-        output = result.stdout.strip()
-        if not output:
-            return None
-
-        open_actions = result.returncode == 10
-
-        if output.isdigit():
-            selected_idx = int(output)
-            if 0 <= selected_idx < nav_count:
-                nav_payload = nav_by_index[selected_idx]
-                if open_actions:
-                    return None
-                return nav_payload
-
-            game_idx = selected_idx - nav_count
-            if 0 <= game_idx < len(games):
-                selected = games[game_idx]
-                logger.info("User selected game: %s [%s]", selected.name, selected.id)
-                if open_actions:
+                if action_trigger == "switch_view_list":
+                    logger.info("User switched to List View via Ctrl+1")
+                    vm.switch_to_list()
+                    continue
+                elif action_trigger == "switch_view_grid":
+                    continue
+                elif action_trigger == "refresh":
+                    return "NAV_STATS"
+                elif action_trigger == "action_menu" and selected is not None:
                     return (selected, "SECONDARY_KEY")
-                return selected
+                elif action_trigger == "launch" and selected is not None:
+                    return selected
+                else:
+                    return None
 
-        selected = name_map.get(output)
-        if selected is not None:
-            logger.info("User selected game (title match): %s [%s]", selected.name, selected.id)
-            if open_actions:
-                return (selected, "SECONDARY_KEY")
-            return selected
+            # 2. List View Mode
+            else:
+                use_custom_key = bool(self.secondary_action_key and self.enable_action_menu)
+                lines: list[str] = []
+                name_map: dict[str, Game] = {}
+                nav_by_index: list[Any] = []
 
-        return None
+                def _append_nav(
+                    display: str,
+                    marker: str,
+                    payload: Any,
+                    *,
+                    meta: str | None = None,
+                ) -> None:
+                    parts = [display, f"info\x1f{marker}"]
+                    if meta:
+                        parts.append(f"meta\x1f{meta}")
+                    lines.append(f"{parts[0]}\0{'\x1f'.join(parts[1:])}")
+                    nav_by_index.append(payload)
+
+                # Main menu top navigation submenus
+                _append_nav(
+                    "📁  Collections...",
+                    "nav_collections",
+                    "NAV_COLLECTIONS",
+                    meta="collections library provider steam lutris heroic custom",
+                )
+                _append_nav(
+                    "🏷  Filter by Tag...",
+                    "nav_tags",
+                    "NAV_TAGS",
+                    meta="tags rpg soulslike fps indie coop finished wishlist",
+                )
+                _append_nav(
+                    "📊  Library Stats",
+                    "nav_stats",
+                    "NAV_STATS",
+                    meta="stats statistics playtime launches favorites total library",
+                )
+
+                nav_count = len(lines)
+
+                for idx, game in enumerate(games):
+                    base_title = game.name.strip() if game.name else f"Game #{idx + 1}"
+                    display_title = f"★  {base_title}" if game.favorite else base_title
+                    name_map[display_title] = game
+
+                    meta_keywords = generate_search_metadata(
+                        name=game.name,
+                        appid=game.appid,
+                        source=game.source,
+                        game=game,
+                    )
+
+                    icon_spec = self.resolve_game_icon(game) if self.show_icons else None
+
+                    parts = [display_title, f"meta\x1f{meta_keywords}", f"info\x1fgame:{idx}"]
+                    if icon_spec:
+                        parts.insert(1, f"icon\x1f{icon_spec}")
+
+                    line = f"{parts[0]}\0{'\x1f'.join(parts[1:])}"
+                    lines.append(line)
+
+                cmd, _ = self._get_base_cmd(prompt_str, len(lines))
+
+                if not use_custom_key:
+                    cmd.append("-no-custom")
+                else:
+                    cmd.extend(["-kb-custom-1", self.secondary_action_key])
+
+                cmd.extend([
+                    "-kb-custom-2", "Control+1",
+                    "-kb-custom-3", "Control+2",
+                    "-kb-custom-4", "Control+f",
+                    "-kb-custom-5", "F5",
+                    "-mesg", "<b>Enter</b> Play  •  <b>Alt</b> Options  •  <b>Ctrl+1</b> List  •  <b>Ctrl+2</b> Grid  •  <b>Ctrl+F</b> Search  •  <b>Esc</b> Back  •  <b>F5</b> Refresh",
+                ])
+
+                input_payload = "\n".join(lines) + "\n"
+                logger.debug("Opening Rofi menu with %d nav items and %d games", nav_count, len(games))
+
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        input=input_payload,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        check=False,
+                    )
+                except OSError as err:
+                    logger.error("Failed to execute Rofi process: %s", err)
+                    raise RuntimeError(f"Failed to execute Rofi: {err}") from err
+
+                # Handle view switching shortcuts
+                if result.returncode == 11:
+                    logger.info("User requested List View via Ctrl+1")
+                    vm.switch_to_list()
+                    continue
+                elif result.returncode == 12:
+                    logger.info("User requested Grid View via Ctrl+2")
+                    vm.switch_to_grid()
+                    continue
+                elif result.returncode == 14:
+                    return "NAV_STATS"
+                elif result.returncode not in (0, 10):
+                    logger.debug("Rofi selection cancelled (returncode=%d)", result.returncode)
+                    return None
+
+                output = result.stdout.strip()
+                if not output:
+                    return None
+
+                open_actions = result.returncode == 10
+
+                if output.isdigit():
+                    selected_idx = int(output)
+                    if 0 <= selected_idx < nav_count:
+                        nav_payload = nav_by_index[selected_idx]
+                        if open_actions:
+                            return None
+                        return nav_payload
+
+                    game_idx = selected_idx - nav_count
+                    if 0 <= game_idx < len(games):
+                        selected = games[game_idx]
+                        logger.info("User selected game: %s [%s]", selected.name, selected.id)
+                        if open_actions:
+                            return (selected, "SECONDARY_KEY")
+                        return selected
+
+                selected = name_map.get(output)
+                if selected is not None:
+                    logger.info("User selected game (title match): %s [%s]", selected.name, selected.id)
+                    if open_actions:
+                        return (selected, "SECONDARY_KEY")
+                    return selected
+
+                return None
 
     def select_game_action(self, game: Game, prompt: str | None = None) -> tuple[str, Any]:
         """Display dynamic context action menu for the chosen game in preferred usability order.
@@ -336,7 +431,7 @@ class RofiUI:
             elif act.id == "toggle_favorite":
                 label = "★  Unfavorite" if game.favorite else "★  Favorite"
                 items.append(label)
-            elif act.id in ("open_folder", "browse_files"):
+            elif act.id == "open_folder":
                 items.append("📁  Open Folder")
             elif act.id == "select_profile":
                 items.append("⚡  Launch Profiles")

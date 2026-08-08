@@ -85,6 +85,10 @@ class GameDeck:
                 theme=theme,
                 quick_launch=self.settings.ui.quick_launch,
                 secondary_action_key=self.settings.ui.secondary_action_key,
+                default_view=self.settings.ui.default_view,
+                grid_columns=self.settings.ui.grid_columns,
+                grid_card_style=self.settings.ui.grid_card_style,
+                db_cache=self.metadata_manager.metadata_cache,
             )
 
     def sort_library_games(self, games: list[Game]) -> list[Game]:
@@ -191,8 +195,25 @@ class GameDeck:
             action="store_true",
             help="Print library statistics (total games, playtime, most played, launcher distribution)",
         )
+        parser.add_argument(
+            "--view",
+            choices=["list", "grid", "carousel"],
+            help="Select presentation view mode ('list' or 'grid')",
+        )
+        parser.add_argument(
+            "--grid",
+            action="store_true",
+            help="Launch directly in Grid View mode",
+        )
 
         args, _ = parser.parse_known_args(argv)
+
+        if getattr(args, "grid", False) or getattr(args, "view", None) == "grid":
+            if self.ui is not None:
+                self.ui.switch_to_grid()
+        elif getattr(args, "view", None) == "list":
+            if self.ui is not None:
+                self.ui.switch_to_list()
 
         if self.scanner is None:
             return 1

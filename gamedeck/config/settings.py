@@ -92,6 +92,9 @@ class UIConfig:
         show_recently_played: Whether recently played games are prioritized above the alphabetical list.
         secondary_action_key: Rofi keybinding (custom-1) to open the action menu instead of launching.
         steamgriddb_api_key: Optional SteamGridDB API key for automatic artwork downloads.
+        default_view: Initial library view mode ('list' or 'grid').
+        grid_columns: Default number of columns for grid view (0 for auto-responsive).
+        grid_card_style: Card styling layout ('portrait', 'compact', 'landscape', 'hero').
     """
 
     rofi_theme: str = ""
@@ -100,6 +103,9 @@ class UIConfig:
     quick_launch: bool = False
     secondary_action_key: str = "Alt+Return"
     steamgriddb_api_key: str = ""
+    default_view: str = "list"
+    grid_columns: int = 5
+    grid_card_style: str = "portrait"
 
 
 @dataclass(slots=True)
@@ -198,6 +204,9 @@ class Settings:
             quick_launch=bool(ui_dict.get("quick_launch", False)),
             secondary_action_key=str(ui_dict.get("secondary_action_key", "Alt+Return")),
             steamgriddb_api_key=sgdb_key,
+            default_view=str(ui_dict.get("default_view", "list")),
+            grid_columns=int(ui_dict.get("grid_columns", 5)),
+            grid_card_style=str(ui_dict.get("grid_card_style", "portrait")),
         )
 
         # Parse launch section
