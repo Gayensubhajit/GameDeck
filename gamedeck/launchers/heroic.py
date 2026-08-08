@@ -6,9 +6,10 @@ import logging
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from gamedeck.launchers import BaseLauncher
 from gamedeck.models import Game
 
 __all__ = ["HeroicLauncher", "launch"]
@@ -17,13 +18,20 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class HeroicLauncher:
+class HeroicLauncher(BaseLauncher):
     """Launcher backend for executing games registered through Heroic Games Launcher.
+
+    Class attributes:
+        name: Launcher identifier — ``"heroic"``.
+        aliases: No additional aliases.
 
     Attributes:
         heroic_bin: Name or absolute path of the Heroic binary executable.
         flatpak_app_id: Flatpak Application ID for Flatpak installations of Heroic.
     """
+
+    name: str = field(default="heroic", init=False, repr=False, compare=False)
+    aliases: tuple[str, ...] = field(default=(), init=False, repr=False, compare=False)
 
     heroic_bin: str = "heroic"
     flatpak_app_id: str = "com.heroicgameslauncher.hgl"

@@ -12,6 +12,7 @@ from typing import Any
 import yaml
 
 from gamedeck.models import Game
+from gamedeck.providers import BaseProvider
 
 __all__ = ["LutrisProvider", "get_games"]
 
@@ -19,11 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class LutrisProvider:
+class LutrisProvider(BaseProvider):
     """Provider for scanning and loading games configured in Lutris.
 
     Reads Lutris YAML configuration files from user config directories without
     executing the Lutris client or launching any games.
+
+    Class attributes:
+        name: Provider identifier — ``"lutris"``.
+        priority: Deduplication precedence — ``30``.
 
     Attributes:
         config_dirs: Directories to scan for Lutris game YAML files.
@@ -32,10 +37,23 @@ class LutrisProvider:
         icon_dirs: Directories containing application and Lutris icons.
     """
 
+    name: str = field(default="lutris", init=False, repr=False, compare=False)
+    priority: int = field(default=30, init=False, repr=False, compare=False)
+
     config_dirs: list[Path] = field(default_factory=list)
     banner_dirs: list[Path] = field(default_factory=list)
     coverart_dirs: list[Path] = field(default_factory=list)
     icon_dirs: list[Path] = field(default_factory=list)
+
+    def enabled(self) -> bool:
+        """Return ``True`` if at least one Lutris config directory exists.
+
+        When no config_dirs were provided at construction, auto-discovery runs first.
+        Explicitly-provided config_dirs are used as-is.
+        """
+        if not self.config_dirs:
+            self.__post_init__()
+        return any(d.is_dir() for d in self.config_dirs)
 
     def __post_init__(self) -> None:
         """Initialize default search paths if none were explicitly provided."""
@@ -76,7 +94,7 @@ class LutrisProvider:
                 Path("/usr/share/icons/hicolor/scalable/apps"),
             ]
 
-    def get_games(self) -> list[Game]:
+    def scan(self) -> list[Game]:
         """Scan configured directories and return all discovered Lutris games.
 
         Returns:
@@ -147,10 +165,6 @@ class LutrisProvider:
         # Resolve executable path
         executable = self._resolve_executable(game_dict)
 
-        # Resolve cover art and icon
-        cover = self._resolve_cover(slug, game_slug_str, file_path.stem)
-        icon = self._resolve_icon(slug, game_slug_str, file_path.stem)
-
         # Determine installation state
         installed = True
         if executable is not None:
@@ -158,14 +172,18 @@ class LutrisProvider:
 
         favorite = bool(data.get("favorite", False))
 
+        # Discover native Lutris application icon
+        lutris_icon = self._resolve_lutris_icon(slug)
+
+        # Runner can be wine, linux, steam, etc. Defaults to lutris backend
         return Game(
             id=game_id,
             name=name,
             source="lutris",
             launcher="lutris",
             executable=executable,
-            icon=icon,
-            cover=cover,
+            icon=lutris_icon,
+            cover=None,
             installed=installed,
             favorite=favorite,
             appid=slug,
@@ -206,75 +224,27 @@ class LutrisProvider:
             return Path(exe.strip())
         return None
 
-    def _resolve_cover(
-        self,
-        slug: str,
-        game_slug: str | None,
-        file_stem: str,
-    ) -> Path | None:
-        """Find the game cover art or banner image path if present."""
-        candidates = self._generate_asset_candidates(slug, game_slug, file_stem)
-        extensions = (".jpg", ".png", ".webp", ".jpeg")
+    def _resolve_lutris_icon(self, slug: str) -> Path | None:
+        """Resolve native application icon for a Lutris game from local icon caches."""
+        if not slug:
+            return None
 
-        search_dirs = list(self.coverart_dirs) + list(self.banner_dirs)
+        home = Path.home()
+        xdg_data = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share"))
 
-        for directory in search_dirs:
-            if not directory.is_dir():
-                continue
-            for candidate in candidates:
-                for ext in extensions:
-                    target = directory / f"{candidate}{ext}"
-                    if target.is_file():
-                        return target
-
-        return None
-
-    def _resolve_icon(
-        self,
-        slug: str,
-        game_slug: str | None,
-        file_stem: str,
-    ) -> Path | None:
-        """Find the game icon path if present."""
-        candidates = self._generate_asset_candidates(slug, game_slug, file_stem)
-        extensions = (".png", ".svg", ".jpg", ".webp", ".ico")
-
-        for directory in self.icon_dirs:
-            if not directory.is_dir():
-                continue
-            for candidate in candidates:
-                for prefix in ("lutris_", ""):
-                    for ext in extensions:
-                        target = directory / f"{prefix}{candidate}{ext}"
-                        if target.is_file():
-                            return target
+        candidates = [
+            xdg_data / "icons" / "hicolor" / "128x128" / "apps" / f"lutris_{slug}.png",
+            xdg_data / "icons" / "hicolor" / "256x256" / "apps" / f"lutris_{slug}.png",
+            xdg_data / "icons" / "hicolor" / "scalable" / "apps" / f"lutris_{slug}.svg",
+            home / ".local" / "share" / "icons" / "hicolor" / "128x128" / "apps" / f"lutris_{slug}.png",
+            xdg_data / "lutris" / "icons" / f"{slug}.png",
+            home / ".cache" / "lutris" / "icons" / f"{slug}.png",
+        ]
+        for c in candidates:
+            if c.is_file() and c.stat().st_size > 0:
+                return c
 
         return None
-
-    def _generate_asset_candidates(
-        self,
-        slug: str,
-        game_slug: str | None,
-        file_stem: str,
-    ) -> list[str]:
-        """Generate potential asset file name stems."""
-        candidates: list[str] = []
-
-        def add_candidate(item: str | None) -> None:
-            if not item:
-                return
-            cleaned = item.strip()
-            if cleaned and cleaned not in candidates:
-                candidates.append(cleaned)
-            base = re.sub(r"-\d+$", "", cleaned)
-            if base and base not in candidates:
-                candidates.append(base)
-
-        add_candidate(slug)
-        add_candidate(game_slug)
-        add_candidate(file_stem)
-
-        return candidates
 
 
 def get_games(config_dirs: list[Path] | None = None) -> list[Game]:

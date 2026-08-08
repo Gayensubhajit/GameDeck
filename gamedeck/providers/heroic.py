@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from gamedeck.models import Game
+from gamedeck.providers import BaseProvider
 
 __all__ = ["HeroicProvider", "get_games"]
 
@@ -18,17 +19,34 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class HeroicProvider:
+class HeroicProvider(BaseProvider):
     """Provider for discovering games managed by Heroic Games Launcher.
 
     Supports Epic Games (Legendary), GOG (gogdl), Amazon Prime (Nile), and
     sideloaded games across native Linux, Flatpak, and Snap installations.
 
+    Class attributes:
+        name: Provider identifier — ``"heroic"``.
+        priority: Deduplication precedence — ``40``.
+
     Attributes:
         heroic_roots: Base directories containing Heroic configuration files.
     """
 
+    name: str = field(default="heroic", init=False, repr=False, compare=False)
+    priority: int = field(default=40, init=False, repr=False, compare=False)
+
     heroic_roots: list[Path] = field(default_factory=list)
+
+    def enabled(self) -> bool:
+        """Return ``True`` if at least one Heroic configuration directory exists.
+
+        When no roots were provided at construction, auto-discovery runs first.
+        Explicitly-provided roots are used as-is.
+        """
+        if not self.heroic_roots:
+            self.__post_init__()
+        return any(r.is_dir() for r in self.heroic_roots)
 
     def __post_init__(self) -> None:
         """Initialize default Heroic configuration roots if none were provided."""
@@ -58,7 +76,7 @@ class HeroicProvider:
 
             self.heroic_roots = resolved_roots
 
-    def get_games(self) -> list[Game]:
+    def scan(self) -> list[Game]:
         """Scan all Heroic installation roots and return all discovered games.
 
         Returns:
@@ -237,12 +255,11 @@ class HeroicProvider:
         # Build unique identifier
         game_id = f"heroic_{app_name_str}"
 
-        # Resolve cover art and icon
-        cover = self._resolve_cover(root, app_name_str)
-        icon = self._resolve_icon(root, app_name_str)
-
         # Favorite status
         favorite = bool(item.get("favorite", False))
+
+        # Discover native Heroic icon
+        heroic_icon = self._resolve_heroic_icon(root, app_name_str)
 
         return Game(
             id=game_id,
@@ -250,54 +267,28 @@ class HeroicProvider:
             source="heroic",
             launcher="heroic",
             executable=executable_path,
-            icon=icon,
-            cover=cover,
+            icon=heroic_icon,
+            cover=None,
             installed=True,
             favorite=favorite,
             appid=app_name_str,
         )
 
-    def _resolve_cover(self, root: Path, app_name: str) -> Path | None:
-        """Find the cover art or banner image for a Heroic game."""
-        candidates = [
-            root / "store_cache" / "images" / f"{app_name}-cover.jpg",
-            root / "store_cache" / "images" / f"{app_name}-cover.png",
-            root / "store_cache" / "images" / f"{app_name}.jpg",
-            root / "store_cache" / "images" / f"{app_name}.png",
-            root / "coverart" / f"{app_name}.jpg",
-            root / "coverart" / f"{app_name}.png",
-        ]
-        for candidate in candidates:
-            if candidate.is_file():
-                return candidate
-        return None
 
-    def _resolve_icon(self, root: Path, app_name: str) -> Path | None:
-        """Find the icon file for a Heroic game."""
+    def _resolve_heroic_icon(self, root: Path, app_name: str) -> Path | None:
+        """Resolve native application icon for a Heroic game from icons folder or image cache."""
+        if not app_name:
+            return None
+
         candidates = [
-            root / "store_cache" / "images" / f"{app_name}-icon.png",
-            root / "store_cache" / "images" / f"{app_name}-icon.jpg",
-            root / "store_cache" / "images" / f"{app_name}.png",
             root / "icons" / f"{app_name}.png",
+            root / "icons" / f"{app_name}.jpg",
+            root / "store_cache" / "images" / f"{app_name}.png",
+            root / "store_cache" / "images" / f"{app_name}.jpg",
         ]
-        for candidate in candidates:
-            if candidate.is_file():
-                return candidate
-
-        # System hicolor icons
-        home = Path.home()
-        xdg_data = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share"))
-        for icon_dir in (
-            xdg_data / "icons" / "hicolor" / "128x128" / "apps",
-            xdg_data / "icons" / "hicolor" / "256x256" / "apps",
-            xdg_data / "icons" / "hicolor" / "scalable" / "apps",
-        ):
-            if not icon_dir.is_dir():
-                continue
-            for ext in (".png", ".svg"):
-                icon_candidate = icon_dir / f"heroic_{app_name}{ext}"
-                if icon_candidate.is_file():
-                    return icon_candidate
+        for c in candidates:
+            if c.is_file() and c.stat().st_size > 0:
+                return c
 
         return None
 

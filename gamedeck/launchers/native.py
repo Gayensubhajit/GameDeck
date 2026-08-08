@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from gamedeck.launchers import BaseLauncher
 from gamedeck.models import Game
 
 __all__ = ["NativeLauncher", "launch"]
@@ -17,8 +18,16 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class NativeLauncher:
-    """Launcher backend for executing native Linux game binaries and scripts."""
+class NativeLauncher(BaseLauncher):
+    """Launcher backend for executing native Linux game binaries and scripts.
+
+    Class attributes:
+        name: Launcher identifier — ``"native"``.
+        aliases: Also responds to ``"linux"``.
+    """
+
+    name: str = field(default="native", init=False, repr=False, compare=False)
+    aliases: tuple[str, ...] = field(default=("linux",), init=False, repr=False, compare=False)
 
     def launch(
         self,

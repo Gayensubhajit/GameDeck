@@ -11,6 +11,7 @@ from typing import Any
 import vdf
 
 from gamedeck.models import Game
+from gamedeck.providers import BaseProvider
 
 __all__ = ["SteamProvider", "get_games"]
 
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 # Known Steam runtime components, compatibility tools, dedicated servers, and redistributables
 KNOWN_RUNTIME_APPIDS: frozenset[str] = frozenset(
     {
+        "888",    # Steam internal test/tool app "Enabled Game" — not a real game
         "228980",  # Steamworks Common Redistributables
         "250820",  # SteamVR
         "891390",  # Steam Linux Runtime
@@ -49,19 +51,38 @@ KNOWN_RUNTIME_APPIDS: frozenset[str] = frozenset(
 
 
 @dataclass(slots=True)
-class SteamProvider:
+class SteamProvider(BaseProvider):
     """Provider for scanning and discovering installed Steam games.
 
     Reads Steam `libraryfolders.vdf` to detect all configured Steam library
     locations, parses individual `appmanifest_*.acf` files, and returns
-    `Game` model instances while filtering out Steam runtimes, compatibility tools,
-    dedicated servers, and non-game packages.
+    ``Game`` model instances while filtering out Steam runtimes, compatibility
+    tools, dedicated servers, and non-game packages.
+
+    Class attributes:
+        name: Provider identifier — ``"steam"``.
+        priority: Deduplication precedence — ``50`` (highest built-in).
 
     Attributes:
         steam_roots: Base Steam installation directories to scan.
     """
 
+    name: str = field(default="steam", init=False, repr=False, compare=False)
+    priority: int = field(default=50, init=False, repr=False, compare=False)
+
     steam_roots: list[Path] = field(default_factory=list)
+
+    def enabled(self) -> bool:
+        """Return ``True`` if at least one Steam installation directory exists.
+
+        When called on a freshly-instantiated provider with no explicit roots,
+        auto-discovery is triggered first.  If roots were supplied at
+        construction time they are used as-is.
+        """
+        if not self.steam_roots:
+            # Only run discovery when no roots were explicitly provided
+            self.__post_init__()
+        return any(r.is_dir() for r in self.steam_roots)
 
     def __post_init__(self) -> None:
         """Discover default Steam installation roots if none were provided."""
@@ -93,7 +114,7 @@ class SteamProvider:
 
             self.steam_roots = resolved_roots
 
-    def get_games(self) -> list[Game]:
+    def scan(self) -> list[Game]:
         """Scan all Steam libraries and return a list of discovered games.
 
         Returns:
@@ -233,12 +254,8 @@ class SteamProvider:
                 installed = bool(flags_int & 4)
             except (ValueError, TypeError):
                 installed = executable.exists() if executable else True
-        elif executable is not None:
-            installed = executable.exists()
-
-        # Resolve cover art and icon
-        cover = self._resolve_cover(appid)
-        icon = self._resolve_icon(appid)
+        # Discover native Steam icon
+        steam_icon = self._resolve_steam_icon(appid)
 
         return Game(
             id=game_id,
@@ -246,8 +263,8 @@ class SteamProvider:
             source="steam",
             launcher="steam",
             executable=executable,
-            icon=icon,
-            cover=cover,
+            icon=steam_icon,
+            cover=None,
             installed=installed,
             favorite=False,
             appid=appid,
@@ -389,108 +406,37 @@ class SteamProvider:
                     seen_dirs.add(resolved)
                     libraries.append(candidate_steamapps)
 
-    def _resolve_cover(self, appid: str) -> Path | None:
-        """Find the cover art or capsule image for a Steam game."""
-        for root in self.steam_roots:
-            # 1. Check Steam appcache librarycache (600x900 portrait capsule)
-            cache_dir = root / "appcache" / "librarycache" / appid
-            if cache_dir.is_dir():
-                candidates = [
-                    cache_dir / f"{appid}_library_600x900.jpg",
-                    cache_dir / "library_600x900.jpg",
-                    cache_dir / f"{appid}_library_hero.jpg",
-                    cache_dir / "library_hero.jpg",
-                    cache_dir / f"{appid}_header.jpg",
-                    cache_dir / "header.jpg",
-                ]
-                for candidate in candidates:
-                    if candidate.is_file():
-                        return candidate
 
-                # Fallback to any image inside the appcache folder
-                for img in cache_dir.glob("*.jpg"):
-                    if img.is_file():
-                        return img
-                for img in cache_dir.glob("*.png"):
-                    if img.is_file():
-                        return img
+    def _resolve_steam_icon(self, appid: str) -> Path | None:
+        """Resolve native application icon for a Steam game from local icon caches."""
+        if not appid:
+            return None
 
-            # 2. Check userdata grid folders
-            userdata_dir = root / "userdata"
-            if userdata_dir.is_dir():
-                try:
-                    user_dirs = list(userdata_dir.iterdir())
-                except OSError:
-                    continue
-
-                for user_dir in user_dirs:
-                    if not user_dir.is_dir():
-                        continue
-                    grid_dir = user_dir / "config" / "grid"
-                    if not grid_dir.is_dir():
-                        continue
-
-                    grid_candidates = [
-                        grid_dir / f"{appid}p.jpg",
-                        grid_dir / f"{appid}p.png",
-                        grid_dir / f"{appid}.jpg",
-                        grid_dir / f"{appid}.png",
-                        grid_dir / f"{appid}_hero.jpg",
-                    ]
-                    for candidate in grid_candidates:
-                        if candidate.is_file():
-                            return candidate
-
-        return None
-
-    def _resolve_icon(self, appid: str) -> Path | None:
-        """Find the icon file for a Steam game."""
         home = Path.home()
         xdg_data = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share"))
 
-        # 1. Check system hicolor icon themes
-        icon_dirs = [
-            xdg_data / "icons" / "hicolor" / "128x128" / "apps",
-            xdg_data / "icons" / "hicolor" / "256x256" / "apps",
-            xdg_data / "icons" / "hicolor" / "scalable" / "apps",
-            xdg_data / "icons" / "hicolor" / "48x48" / "apps",
-            xdg_data / "icons" / "hicolor" / "32x32" / "apps",
-            home / ".local" / "share" / "icons" / "hicolor" / "128x128" / "apps",
-            Path("/usr/share/icons/hicolor/128x128/apps"),
-            Path("/usr/share/icons/hicolor/scalable/apps"),
+        candidates = [
+            xdg_data / "icons" / "hicolor" / "128x128" / "apps" / f"steam_icon_{appid}.png",
+            xdg_data / "icons" / "hicolor" / "256x256" / "apps" / f"steam_icon_{appid}.png",
+            xdg_data / "icons" / "hicolor" / "scalable" / "apps" / f"steam_icon_{appid}.svg",
+            home / ".local" / "share" / "icons" / "hicolor" / "128x128" / "apps" / f"steam_icon_{appid}.png",
+            Path("/usr/share/icons/hicolor/128x128/apps") / f"steam_icon_{appid}.png",
+            xdg_data / "Steam" / "appcache" / "librarycache" / appid / f"{appid}_icon.jpg",
+            xdg_data / "Steam" / "appcache" / "librarycache" / appid / "icon.png",
+            home / ".steam" / "steam" / "appcache" / "librarycache" / appid / f"{appid}_icon.jpg",
         ]
-
-        for icon_dir in icon_dirs:
-            if not icon_dir.is_dir():
-                continue
-            for ext in (".png", ".svg"):
-                icon_file = icon_dir / f"steam_icon_{appid}{ext}"
-                if icon_file.is_file():
-                    return icon_file
-
-        # 2. Check Steam appcache librarycache logo/icon
-        for root in self.steam_roots:
-            cache_dir = root / "appcache" / "librarycache" / appid
-            if cache_dir.is_dir():
-                candidates = [
-                    cache_dir / f"{appid}_icon.jpg",
-                    cache_dir / f"{appid}_icon.png",
-                    cache_dir / f"{appid}_logo.png",
-                    cache_dir / "logo.png",
-                    cache_dir / "icon.png",
-                ]
-                for candidate in candidates:
-                    if candidate.is_file():
-                        return candidate
+        for c in candidates:
+            if c.is_file() and c.stat().st_size > 0:
+                return c
 
         return None
 
 
 def get_games(steam_roots: list[Path] | None = None) -> list[Game]:
-    """Retrieve all discovered Steam games across all libraries.
+    """Retrieve all installed Steam games.
 
     Args:
-        steam_roots: Optional list of base Steam installation directories.
+        steam_roots: Optional list of Steam installation directories.
 
     Returns:
         A list of Game model instances.

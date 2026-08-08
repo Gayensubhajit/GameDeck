@@ -6,9 +6,10 @@ import logging
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from gamedeck.launchers import BaseLauncher
 from gamedeck.models import Game
 
 __all__ = ["SteamLauncher", "launch"]
@@ -17,12 +18,19 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class SteamLauncher:
+class SteamLauncher(BaseLauncher):
     """Launcher backend for executing games registered through Steam.
+
+    Class attributes:
+        name: Launcher identifier — ``"steam"``.
+        aliases: No additional aliases.
 
     Attributes:
         steam_bin: Name or absolute path of the Steam binary executable.
     """
+
+    name: str = field(default="steam", init=False, repr=False, compare=False)
+    aliases: tuple[str, ...] = field(default=(), init=False, repr=False, compare=False)
 
     steam_bin: str = "steam"
 

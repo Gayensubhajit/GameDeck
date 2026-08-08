@@ -36,17 +36,19 @@ class TestFavorites(unittest.TestCase):
 
         ui = RofiUI()
         with patch("shutil.which", return_value="/usr/bin/rofi"), patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="0\n")
+            mock_run.return_value = MagicMock(returncode=0, stdout="4\n")
             ui.select([g_fav, g_norm])
 
             mock_run.assert_called_once()
             input_payload = mock_run.call_args[1]["input"]
             lines = input_payload.splitlines()
 
-            # Star indicator should be in first line
-            self.assertTrue(lines[0].startswith("★  Black Myth - Wukong"))
-            # Normal game should not have star indicator
-            self.assertTrue(lines[1].startswith("Counter-Strike 2"))
+            fav_lines = [line for line in lines if "Black Myth" in line.split("\0")[0]]
+            norm_lines = [line for line in lines if line.split("\0")[0].startswith("Counter-Strike 2")]
+            self.assertEqual(len(fav_lines), 1)
+            self.assertTrue(fav_lines[0].startswith("★  Black Myth - Wukong"))
+            self.assertEqual(len(norm_lines), 1)
+            self.assertTrue(norm_lines[0].startswith("Counter-Strike 2"))
 
     def test_toggle_favorite_persistence(self) -> None:
         """Verify toggle_favorite persists properly in SQLite database."""

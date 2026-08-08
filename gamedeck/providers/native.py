@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from gamedeck.models import Game
+from gamedeck.providers import BaseProvider
 
 __all__ = ["NativeProvider", "get_games"]
 
@@ -77,18 +78,35 @@ IGNORED_DESKTOP_IDS: frozenset[str] = frozenset(
 
 
 @dataclass(slots=True)
-class NativeProvider:
+class NativeProvider(BaseProvider):
     """Provider for scanning native Linux games from standard `.desktop` application entries.
 
     Scans system and user desktop application directories, filters for entries with
-    `Category=Game` (or `Categories=...Game...`), and ignores external launchers,
+    ``Category=Game`` (or ``Categories=...Game...``), and ignores external launchers,
     emulators, and system utilities.
+
+    Class attributes:
+        name: Provider identifier — ``"native"``.
+        priority: Deduplication precedence — ``20``.
 
     Attributes:
         app_dirs: List of directories to scan for `.desktop` application entries.
     """
 
+    name: str = field(default="native", init=False, repr=False, compare=False)
+    priority: int = field(default=20, init=False, repr=False, compare=False)
+
     app_dirs: list[Path] = field(default_factory=list)
+
+    def enabled(self) -> bool:
+        """Return ``True`` if at least one application directory exists.
+
+        When no app_dirs were provided at construction, auto-discovery runs first.
+        Explicitly-provided app_dirs are used as-is.
+        """
+        if not self.app_dirs:
+            self.__post_init__()
+        return any(d.is_dir() for d in self.app_dirs)
 
     def __post_init__(self) -> None:
         """Initialize standard application search directories if none were provided."""
@@ -120,7 +138,7 @@ class NativeProvider:
 
             self.app_dirs = resolved_dirs
 
-    def get_games(self) -> list[Game]:
+    def scan(self) -> list[Game]:
         """Scan configured desktop application directories and return discovered native games.
 
         Returns:
@@ -211,9 +229,9 @@ class NativeProvider:
         stem = desktop_path.stem
         game_id = f"native_{stem}"
 
-        # Resolve icon
+        # Discover native application icon from desktop Icon= field or stem
         icon_field = entry.get("Icon", "").strip()
-        icon = self._resolve_icon(icon_field, stem)
+        icon_path = self._resolve_desktop_icon(icon_field, stem)
 
         return Game(
             id=game_id,
@@ -221,7 +239,7 @@ class NativeProvider:
             source="native",
             launcher="native",
             executable=executable_path,
-            icon=icon,
+            icon=icon_path,
             cover=None,
             installed=True,
             favorite=False,
@@ -250,6 +268,45 @@ class NativeProvider:
             return True
 
         return False
+
+    def _resolve_desktop_icon(self, icon_field: str, stem: str) -> Path | None:
+        """Resolve icon path from desktop Icon= field or stem."""
+        icon_name = icon_field or stem
+        if not icon_name:
+            return None
+
+        # Check if icon_name is an absolute file path
+        if icon_name.startswith("/"):
+            p = Path(icon_name)
+            if p.is_file() and p.stat().st_size > 0:
+                return p
+
+        home = Path.home()
+        xdg_data = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share"))
+        icon_dirs = [
+            xdg_data / "icons" / "hicolor" / "128x128" / "apps",
+            xdg_data / "icons" / "hicolor" / "256x256" / "apps",
+            xdg_data / "icons" / "hicolor" / "scalable" / "apps",
+            xdg_data / "icons" / "hicolor" / "64x64" / "apps",
+            xdg_data / "icons" / "hicolor" / "48x48" / "apps",
+            home / ".local" / "share" / "icons" / "hicolor" / "128x128" / "apps",
+            Path("/usr/share/icons/hicolor/128x128/apps"),
+            Path("/usr/share/icons/hicolor/256x256/apps"),
+            Path("/usr/share/icons/hicolor/64x64/apps"),
+            Path("/usr/share/icons/hicolor/48x48/apps"),
+            Path("/usr/share/icons/hicolor/scalable/apps"),
+            Path("/usr/share/pixmaps"),
+        ]
+
+        for d in icon_dirs:
+            if not d.is_dir():
+                continue
+            for ext in (".png", ".svg", ".xpm", ".ico"):
+                candidate = d / f"{icon_name}{ext}"
+                if candidate.is_file() and candidate.stat().st_size > 0:
+                    return candidate
+
+        return None
 
     def _is_game_category(self, categories_str: str) -> bool:
         """Check if Categories contains Game (e.g. Categories=Game;ActionGame;)."""
@@ -282,41 +339,6 @@ class NativeProvider:
         found = shutil.which(first_token)
         if found is not None:
             return Path(found)
-
-        return None
-
-    def _resolve_icon(self, icon_field: str, stem: str) -> Path | None:
-        """Resolve icon path from Icon= field or desktop theme."""
-        if not icon_field:
-            return None
-
-        # 1. Absolute path provided in desktop file
-        direct_path = Path(icon_field)
-        if direct_path.is_file():
-            return direct_path
-
-        # 2. Check standard system icon directories
-        home = Path.home()
-        xdg_data = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share"))
-
-        icon_dirs = [
-            xdg_data / "icons" / "hicolor" / "128x128" / "apps",
-            xdg_data / "icons" / "hicolor" / "256x256" / "apps",
-            xdg_data / "icons" / "hicolor" / "scalable" / "apps",
-            xdg_data / "icons" / "hicolor" / "48x48" / "apps",
-            home / ".local" / "share" / "icons" / "hicolor" / "128x128" / "apps",
-            Path("/usr/share/icons/hicolor/128x128/apps"),
-            Path("/usr/share/icons/hicolor/scalable/apps"),
-            Path("/usr/share/pixmaps"),
-        ]
-
-        for icon_dir in icon_dirs:
-            if not icon_dir.is_dir():
-                continue
-            for ext in (".png", ".svg", ".xpm"):
-                candidate = icon_dir / f"{icon_field}{ext}"
-                if candidate.is_file():
-                    return candidate
 
         return None
 

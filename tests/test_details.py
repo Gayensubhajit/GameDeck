@@ -1,0 +1,108 @@
+"""Unit tests for the Game Details system and on-demand metadata retrieval."""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from gamedeck.database import MetadataCache
+from gamedeck.details import GameDetails, GameDetailsProvider
+from gamedeck.models import Game
+
+
+class TestGameDetailsSystem(unittest.TestCase):
+    """Test GameDetails generation, cached metadata extraction, and zero duplicate scanning."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.cache = MetadataCache(db_path=self.root / "metadata.db")
+        self.provider = GameDetailsProvider(metadata_cache=self.cache)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_details_from_game_instance(self) -> None:
+        """Verify GameDetails generation from in-memory Game model."""
+        exe_file = self.root / "Games" / "EldenRing" / "eldenring.exe"
+        exe_file.parent.mkdir(parents=True, exist_ok=True)
+        exe_file.write_bytes(b"exe")
+
+        game = Game(
+            id="steam_1245620",
+            name="Elden Ring",
+            source="steam",
+            launcher="steam",
+            executable=exe_file,
+            appid="1245620",
+            favorite=True,
+            launch_count=12,
+            last_played="2026-08-08T10:00:00Z",
+        )
+
+        details = self.provider.get_details(game)
+        self.assertIsNotNone(details)
+        self.assertEqual(details.title, "Elden Ring")
+        self.assertEqual(details.source, "steam")
+        self.assertEqual(details.provider_name, "Steam")
+        self.assertEqual(details.launcher, "steam")
+        self.assertEqual(details.install_path, exe_file.parent)
+        self.assertEqual(details.executable, exe_file)
+        self.assertEqual(details.launch_count, 12)
+        self.assertEqual(details.last_played, "2026-08-08T10:00:00Z")
+        self.assertTrue(details.favorite)
+
+    def test_details_from_sqlite_cache_by_id(self) -> None:
+        """Verify on-demand details lookup from SQLite without rescanning providers."""
+        exe_file = self.root / "Games" / "Cyberpunk" / "Cyberpunk2077.exe"
+        exe_file.parent.mkdir(parents=True, exist_ok=True)
+        exe_file.write_bytes(b"cyberpunk")
+
+        game = Game(
+            id="heroic_cyberpunk",
+            name="Cyberpunk 2077",
+            source="heroic",
+            launcher="heroic",
+            executable=exe_file,
+            appid="cyberpunk",
+            favorite=False,
+            launch_count=3,
+        )
+
+        # Save to SQLite cached_games
+        self.cache.save_cached_games_for_provider("heroic", [game])
+
+        # Retrieve details by ID string
+        details = self.provider.get_details("heroic_cyberpunk")
+        self.assertIsNotNone(details)
+        self.assertEqual(details.title, "Cyberpunk 2077")
+        self.assertEqual(details.source, "heroic")
+        self.assertEqual(details.provider_name, "Heroic Games Launcher")
+        self.assertEqual(details.launcher, "heroic")
+        self.assertEqual(details.install_path, exe_file.parent)
+
+    def test_formatted_summary(self) -> None:
+        """Verify formatted summary text includes all required fields."""
+        game = Game(
+            id="lutris_bmw",
+            name="Black Myth: Wukong",
+            source="lutris",
+            launcher="lutris",
+            appid="bmw",
+        )
+        details = self.provider.get_details(game)
+        summary = details.formatted_summary()
+        self.assertIn("Title:        Black Myth: Wukong", summary)
+        self.assertIn("Source:       lutris (Lutris)", summary)
+        self.assertIn("Launcher:     lutris", summary)
+        self.assertIn("Favorite:     No", summary)
+
+    def test_unknown_game_returns_none(self) -> None:
+        """Verify querying non-existent game ID returns None gracefully."""
+        details = self.provider.get_details("non_existent_game_id")
+        self.assertIsNone(details)
+
+
+if __name__ == "__main__":
+    unittest.main()

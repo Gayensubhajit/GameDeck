@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from gamedeck.models import Game
+from gamedeck.providers import BaseProvider
 
 __all__ = ["FilesystemProvider", "get_games"]
 
@@ -35,6 +36,28 @@ IGNORED_SUBDIR_NAMES: frozenset[str] = frozenset(
         "umu-default",
         "pfx",
         "wineprefix",
+    }
+)
+
+# Top-level directory names that are Windows system folders, never games.
+# These are matched against the game_dir.name when scanning Program Files paths.
+IGNORED_WINDOWS_SYSTEM_DIRS: frozenset[str] = frozenset(
+    {
+        "windows",
+        "windows media player",
+        "windows nt",
+        "windows mail",
+        "windows sidebar",
+        "windows defender",
+        "windows photo viewer",
+        "internet explorer",
+        "common files",
+        "microsoft games",
+        "microsoft",
+        "windowsapps",
+        "reference assemblies",
+        "msbuild",
+        "uninstall information",
     }
 )
 
@@ -120,19 +143,36 @@ IGNORED_EXE_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 
 @dataclass(slots=True)
-class FilesystemProvider:
+class FilesystemProvider(BaseProvider):
     """Provider for scanning local directory trees for standalone Windows and native games.
 
     Detects Windows game executables (.exe) while filtering out uninstallers,
     redistributables, engine crash reporters, and installer tools.
+
+    Class attributes:
+        name: Provider identifier — ``"filesystem"``.
+        priority: Deduplication precedence — ``10`` (lowest built-in).
 
     Attributes:
         search_dirs: List of root directories to scan for installed game folders.
         max_depth: Maximum directory recursion depth when locating game executables.
     """
 
+    name: str = field(default="filesystem", init=False, repr=False, compare=False)
+    priority: int = field(default=10, init=False, repr=False, compare=False)
+
     search_dirs: list[Path] = field(default_factory=list)
     max_depth: int = 4
+
+    def enabled(self) -> bool:
+        """Return ``True`` if at least one game search directory exists.
+
+        When no search_dirs were provided at construction, auto-discovery runs first.
+        Explicitly-provided search_dirs are used as-is.
+        """
+        if not self.search_dirs:
+            self.__post_init__()
+        return any(d.is_dir() for d in self.search_dirs)
 
     def __post_init__(self) -> None:
         """Initialize standard game search directories if none were specified."""
@@ -163,7 +203,7 @@ class FilesystemProvider:
 
             self.search_dirs = resolved_dirs
 
-    def get_games(self) -> list[Game]:
+    def scan(self) -> list[Game]:
         """Scan all configured directories and return discovered games.
 
         Returns:
@@ -188,6 +228,9 @@ class FilesystemProvider:
 
             for game_dir in subdirs:
                 if game_dir.name.lower() in IGNORED_SUBDIR_NAMES:
+                    continue
+                # Skip known Windows system directories (e.g. inside Wine Program Files)
+                if game_dir.name.lower() in IGNORED_WINDOWS_SYSTEM_DIRS:
                     continue
 
                 exe = self.find_game_executable(game_dir)
@@ -345,84 +388,18 @@ class FilesystemProvider:
         slug = self._normalize_slug(raw_name) or "game"
         game_id = f"filesystem_{slug}"
 
-        cover, icon = self._resolve_assets(game_dir, slug)
-
         return Game(
             id=game_id,
             name=raw_name,
             source="filesystem",
             launcher="wine",
             executable=executable,
-            icon=icon,
-            cover=cover,
+            icon=None,
+            cover=None,
             installed=executable.exists(),
             favorite=False,
             appid=slug,
         )
-
-    def _resolve_assets(self, game_dir: Path, slug: str) -> tuple[Path | None, Path | None]:
-        """Locate cover art and icon files for the game."""
-        cover: Path | None = None
-        icon: Path | None = None
-
-        cover_names = {"cover", "poster", "banner", "capsule", "folder", slug}
-        icon_names = {"icon", "app", slug, f"lutris_{slug}"}
-
-        image_exts = {".jpg", ".jpeg", ".png", ".webp"}
-        icon_exts = {".ico", ".png", ".svg"}
-
-        # 1. Search inside game folder
-        try:
-            for item in game_dir.iterdir():
-                if not item.is_file():
-                    continue
-                stem_lower = item.stem.lower()
-                suffix_lower = item.suffix.lower()
-
-                if cover is None and stem_lower in cover_names and suffix_lower in image_exts:
-                    cover = item
-                if icon is None and stem_lower in icon_names and suffix_lower in icon_exts:
-                    icon = item
-        except OSError:
-            pass
-
-        # 2. Check local Lutris artwork caches as fallback
-        if cover is None or icon is None:
-            home = Path.home()
-            xdg_data = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share"))
-
-            if cover is None:
-                for art_dir in (xdg_data / "lutris" / "coverart", xdg_data / "lutris" / "banners"):
-                    if not art_dir.is_dir():
-                        continue
-                    for ext in (".jpg", ".png", ".webp"):
-                        art_file = art_dir / f"{slug}{ext}"
-                        if art_file.is_file():
-                            cover = art_file
-                            break
-                    if cover is not None:
-                        break
-
-            if icon is None:
-                for icon_dir in (
-                    xdg_data / "icons" / "hicolor" / "128x128" / "apps",
-                    xdg_data / "icons" / "hicolor" / "scalable" / "apps",
-                    xdg_data / "lutris" / "icons",
-                ):
-                    if not icon_dir.is_dir():
-                        continue
-                    for prefix in ("lutris_", ""):
-                        for ext in (".png", ".svg"):
-                            icon_file = icon_dir / f"{prefix}{slug}{ext}"
-                            if icon_file.is_file():
-                                icon = icon_file
-                                break
-                        if icon is not None:
-                            break
-                    if icon is not None:
-                        break
-
-        return cover, icon
 
     def _normalize_slug(self, text: str) -> str:
         """Convert a name to a clean alphanumeric slug."""

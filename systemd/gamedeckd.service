@@ -1,0 +1,14 @@
+[Unit]
+Description=GameDeck Library Cache & Provider Watcher Daemon
+Documentation=https://github.com/Gayensubhajit/GameDeck
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/gamedeckd
+Restart=on-failure
+RestartSec=5s
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gamedeck"
+version = "0.5.0"
+description = "Universal, blazingly fast game launcher and library aggregator for Linux and Steam Deck with Rofi dmenu frontend, unified search, collections, tags, and backup."
+readme = "README.md"
+authors = [
+    { name = "Subhajit Gayen", email = "silentbyte@users.noreply.github.com" }
+]
+license = { text = "MIT" }
+keywords = ["linux", "gaming", "steam-deck", "rofi", "launcher", "steam", "lutris", "heroic", "wine"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment",
+]
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "flake8>=6.0.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
+]
+
+[project.scripts]
+gamedeck = "gamedeck.app:main"
+gamedeckd = "gamedeck.daemon:main"
+
+[project.urls]
+Homepage = "https://github.com/Gayensubhajit/GameDeck"
+Repository = "https://github.com/Gayensubhajit/GameDeck.git"
+Issues = "https://github.com/Gayensubhajit/GameDeck/issues"
+Changelog = "https://github.com/Gayensubhajit/GameDeck/releases"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gamedeck*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.coverage.run]
+source = ["gamedeck"]
+branch = true
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 80

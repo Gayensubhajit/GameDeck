@@ -6,10 +6,11 @@ import logging
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from gamedeck.launchers import BaseLauncher
 from gamedeck.models import Game
 
 __all__ = ["WineLauncher", "launch"]
@@ -18,13 +19,22 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class WineLauncher:
+class WineLauncher(BaseLauncher):
     """Launcher backend for executing Windows games via Wine or Proton.
 
+    Class attributes:
+        name: Launcher identifier — ``"wine"``.
+        aliases: Also responds to ``"proton"`` and ``"bottles"``.
+
     Attributes:
-        wine_bin: Binary executable name or path for Wine (e.g. 'wine', 'wine64', 'umu-run').
+        wine_bin: Binary executable name or path for Wine (e.g. ``'wine'``, ``'wine64'``, ``'umu-run'``).
         default_prefix: Optional default WINEPREFIX path to use.
     """
+
+    name: str = field(default="wine", init=False, repr=False, compare=False)
+    aliases: tuple[str, ...] = field(
+        default=("proton", "bottles"), init=False, repr=False, compare=False
+    )
 
     wine_bin: str = "wine"
     default_prefix: Path | str | None = None

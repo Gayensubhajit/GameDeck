@@ -90,11 +90,16 @@ class UIConfig:
         rofi_theme: Optional path or name of the Rofi .rasi theme to use.
         recent_games_limit: Maximum number of recently played games to prioritize.
         show_recently_played: Whether recently played games are prioritized above the alphabetical list.
+        secondary_action_key: Rofi keybinding (custom-1) to open the action menu instead of launching.
+        steamgriddb_api_key: Optional SteamGridDB API key for automatic artwork downloads.
     """
 
     rofi_theme: str = ""
     recent_games_limit: int = 5
     show_recently_played: bool = True
+    quick_launch: bool = False
+    secondary_action_key: str = "Alt+Return"
+    steamgriddb_api_key: str = ""
 
 
 @dataclass(slots=True)
@@ -180,10 +185,19 @@ class Settings:
 
         # Parse UI section
         ui_dict = data.get("ui", {})
+        sgdb_dict = data.get("steamgriddb", {})
+        sgdb_key = str(sgdb_dict.get("api_key", ui_dict.get("steamgriddb_api_key", ""))).strip()
+
+        if sgdb_key and not os.environ.get("STEAMGRIDDB_API_KEY"):
+            os.environ["STEAMGRIDDB_API_KEY"] = sgdb_key
+
         ui = UIConfig(
             rofi_theme=str(ui_dict.get("rofi_theme", "")),
             recent_games_limit=int(ui_dict.get("recent_games_limit", 5)),
             show_recently_played=bool(ui_dict.get("show_recently_played", True)),
+            quick_launch=bool(ui_dict.get("quick_launch", False)),
+            secondary_action_key=str(ui_dict.get("secondary_action_key", "Alt+Return")),
+            steamgriddb_api_key=sgdb_key,
         )
 
         # Parse launch section
