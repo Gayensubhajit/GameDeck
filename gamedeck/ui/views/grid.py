@@ -217,6 +217,7 @@ element-text {{
         active_game: Game | None = None,
         theme_path: Path | str | None = None,
         theme_str: str | None = None,
+        **kwargs: Any,
     ) -> tuple[Game | Any | None, int, str]:
         """Display games as artwork cards in the Grid View.
 
@@ -283,7 +284,8 @@ element-text {{
         mesg_parts: list[str] = []
         if active_game is not None:
             mesg_parts.append(self._build_details_panel(active_game))
-        mesg_parts.append(STATUS_BAR_TEXT)
+        custom_status = kwargs.get("status_bar") or STATUS_BAR_TEXT
+        mesg_parts.append(custom_status)
         full_mesg = "\n".join(mesg_parts)
 
         # Write grid theme to cache file for clean and reliable Rofi parsing
@@ -307,19 +309,17 @@ element-text {{
             "-sort",
             "-sorting-method",
             "fzf",
-            "-kb-custom-1",
-            self.secondary_action_key,
-            "-kb-custom-2",
-            "Control+1",
-            "-kb-custom-3",
-            "Control+2",
-            "-kb-custom-4",
-            "F5",
-            "-mesg",
-            full_mesg,
-            "-theme",
-            str(theme_file),
         ]
+
+        if self.secondary_action_key:
+            cmd.extend(["-kb-custom-1", self.secondary_action_key])
+        cmd.extend([
+            "-kb-custom-2", "Control+1",
+            "-kb-custom-3", "Control+2",
+            "-kb-custom-4", "F5",
+            "-mesg", full_mesg,
+            "-theme", str(theme_file),
+        ])
 
         if theme_path:
             cmd.extend(["-theme", str(theme_path)])
@@ -487,7 +487,7 @@ class CarouselView(LibraryView):
 
 @dataclass(slots=True)
 class DeckView(LibraryView):
-    """Console Deck style view matching handheld console UI with top tabs and gamepad actions."""
+    """Console Deck style view matching handheld console UI with top tabs, big cover art, and gamepad actions."""
 
     name: str = "deck"
     display_name: str = "Deck View"
@@ -509,14 +509,14 @@ class DeckView(LibraryView):
 }
 
 window {
-    width: 94%;
+    width: 95%;
     location: center;
     anchor: center;
     border: 1.5px solid;
     border-color: #2563eb66;
     border-radius: 20px;
     background-color: #030612fa;
-    padding: 20px 24px;
+    padding: 18px 24px;
 }
 
 mainbox {
@@ -530,14 +530,14 @@ inputbar {
     border: 1px solid;
     border-color: #2563eb44;
     border-radius: 14px;
-    padding: 10px 18px;
-    spacing: 14px;
+    padding: 10px 20px;
+    spacing: 16px;
     children: [ prompt, entry ];
 }
 
 prompt {
     text-color: #60a5fa;
-    font: "Outfit Bold 11.5";
+    font: "Outfit Bold 12";
     background-color: transparent;
 }
 
@@ -578,11 +578,11 @@ listview {
 element {
     orientation: vertical;
     children: [ element-icon, element-text ];
-    spacing: 6px;
-    padding: 6px;
+    spacing: 4px;
+    padding: 4px;
     border-radius: 14px;
     background-color: #0c142ba0;
-    border: 1px solid;
+    border: 1.5px solid;
     border-color: #1e293b80;
     text-color: #f8fafc;
 }
@@ -595,7 +595,7 @@ element selected {
 }
 
 element-icon {
-    size: 175px;
+    size: 190px;
     horizontal-align: 0.5;
     vertical-align: 0.5;
     border-radius: 10px;
@@ -606,10 +606,10 @@ element-icon {
 element-text {
     horizontal-align: 0.5;
     vertical-align: 0.5;
-    font: "Outfit Bold 10.5";
+    font: "Outfit Bold 11";
     text-color: inherit;
     background-color: transparent;
-    padding: 4px 6px;
+    padding: 6px 6px 8px 6px;
     cursor: pointer;
 }
 """
@@ -622,8 +622,9 @@ element-text {
             secondary_action_key=self.secondary_action_key,
         )
         kwargs_copy = dict(kwargs)
-        if not kwargs_copy.get("prompt") or kwargs_copy.get("prompt") == "GameDeck > Grid":
-            kwargs_copy["prompt"] = "( L1 )   FAVORITES   •   COLLECTION   •   ACCESSORIES   ( R1 )"
+        # Always use the signature console top tabs and gamepad controller hints
+        kwargs_copy["prompt"] = "( L1 )   FAVORITES   •   COLLECTION   •   ACCESSORIES   ( R1 )"
+        kwargs_copy["status_bar"] = "<b>GAMEDECK</b>                                                                            <b>🎮 NAVIGATE</b>    <b>(X) OPTIONS</b>    <b>(Y) RANDOM PLAY</b>    <b>(A) PLAY</b>"
         if not kwargs_copy.get("theme_str"):
             kwargs_copy["theme_str"] = deck_theme
 

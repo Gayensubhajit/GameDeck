@@ -342,10 +342,10 @@ element-text {
         vm = self._ensure_view_manager()
 
         while True:
-            # 1. Pluggable Graphic/Grid Views (Grid, Compact, Hero, Carousel)
+            # 1. Pluggable Graphic/Grid Views (Grid, Deck, Compact, Hero, Carousel)
             if vm.active_mode != ViewMode.LIST:
                 active_view = vm.active_view
-                view_prompt = f"GameDeck  •  Library  •  {active_view.display_name}  •  {len(games)} Games"
+                view_prompt = prompt if prompt else (None if active_view.name == "deck" else f"GameDeck  •  Library  •  {active_view.display_name}  •  {len(games)} Games")
                 selected, ret_code, action_trigger = vm.render(
                     games=games,
                     prompt=view_prompt,
