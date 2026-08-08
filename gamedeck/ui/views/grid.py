@@ -316,6 +316,7 @@ element-text {{
         if self.secondary_action_key:
             cmd.extend(["-kb-custom-1", self.secondary_action_key])
         cmd.extend([
+            "-kb-remove-char-forward", "Delete",
             "-kb-custom-2", "Control+1",
             "-kb-custom-3", "Control+2",
             "-kb-custom-4", "F5",
