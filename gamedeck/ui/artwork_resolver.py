@@ -75,29 +75,17 @@ class ArtworkResolver:
             if not cached_path.startswith("/") or Path(cached_path).is_file():
                 return cached_path
 
-        # 1. SteamGridDB Hero
-        hero_path = self.get_hero(game)
-        if hero_path:
-            self._thumbnail_cache[cache_key] = hero_path
-            return hero_path
+        # Check in order based on preferred artwork format
+        if preferred_type in ("hero", "landscape", "carousel"):
+            candidate_fns = [self.get_hero, self.get_cover, self.get_capsule, self.get_icon]
+        else:
+            candidate_fns = [self.get_cover, self.get_hero, self.get_capsule, self.get_icon]
 
-        # 2. SteamGridDB Portrait / Cover
-        cover_path = self.get_cover(game)
-        if cover_path:
-            self._thumbnail_cache[cache_key] = cover_path
-            return cover_path
-
-        # 3. Steam Capsule
-        capsule_path = self.get_capsule(game)
-        if capsule_path:
-            self._thumbnail_cache[cache_key] = capsule_path
-            return capsule_path
-
-        # 4. Executable Icon / Game Icon
-        icon_path = self.get_icon(game)
-        if icon_path:
-            self._thumbnail_cache[cache_key] = icon_path
-            return icon_path
+        for fn in candidate_fns:
+            art_path = fn(game)
+            if art_path:
+                self._thumbnail_cache[cache_key] = art_path
+                return art_path
 
         if game.executable is not None:
             exe_icon = self._find_executable_icon(Path(game.executable))

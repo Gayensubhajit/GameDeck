@@ -103,9 +103,9 @@ class UIConfig:
     quick_launch: bool = True
     secondary_action_key: str = "Alt+Return"
     steamgriddb_api_key: str = ""
-    default_view: str = "list"
-    grid_columns: int = 5
-    grid_card_style: str = "portrait"
+    default_view: str = "deck"
+    grid_columns: int = 6
+    grid_card_style: str = "deck"
     offline_mode: bool = False
 
 

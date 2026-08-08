@@ -147,9 +147,9 @@ class RofiUI:
     quick_launch: bool = True
     rofi_bin: str = "rofi"
     secondary_action_key: str = "Alt+Return"
-    default_view: str = "list"
-    grid_columns: int = 5
-    grid_card_style: str = "portrait"
+    default_view: str = "deck"
+    grid_columns: int = 6
+    grid_card_style: str = "deck"
     db_cache: Any = None
     view_manager: ViewManager | None = None
 

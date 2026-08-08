@@ -34,7 +34,7 @@ class TestFavorites(unittest.TestCase):
         g_fav = Game(id="f1", name="Black Myth - Wukong", source="lutris", launcher="lutris", favorite=True)
         g_norm = Game(id="n1", name="Counter-Strike 2", source="steam", launcher="steam", favorite=False)
 
-        ui = RofiUI()
+        ui = RofiUI(default_view="list")
         with patch("shutil.which", return_value="/usr/bin/rofi"), patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="4\n")
             ui.select([g_fav, g_norm])
