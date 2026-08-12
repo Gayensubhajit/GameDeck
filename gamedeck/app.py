@@ -701,13 +701,13 @@ class GameDeck:
 
             if action_name == "refresh_metadata":
                 logger.info("Refreshing metadata and artwork for '%s'", selected_game.name)
-                self.metadata_manager.enrich(selected_game)
+                self.metadata_manager.enrich(selected_game, force_refresh=True)
                 # Force SteamGridDB artwork download for all art types if API key is configured
                 if (
                     self.metadata_manager.steamgriddb is not None
                     and self.metadata_manager.steamgriddb.is_available()
                 ):
-                    self.metadata_manager.steamgriddb.fetch_game_artwork_background(selected_game)
+                    self.metadata_manager.steamgriddb.fetch_game_artwork_background(selected_game, force=True)
                     logger.info("SteamGridDB artwork download queued for '%s'", selected_game.name)
                 else:
                     logger.info(

@@ -47,6 +47,85 @@ class GameDetails:
     tags: list[str] = field(default_factory=list)
     collections: list[str] = field(default_factory=list)
 
+    def format_header_pango(self) -> str:
+        """Transform game metadata into a premium information header with proper typography hierarchy.
+
+        Displays:
+        • Hero Artwork / Game Icon fallback
+        • Game Logo
+        • Game Title (Large Title)
+        • Launcher Badge (Badges instead of plain text)
+        • Platform Badge
+        • Wine Version Badge
+        • Version Badge
+        • Playtime
+        • Last Played
+        • Launch Count
+        • Favorite Indicator
+        """
+        # 1. Launcher Badge
+        launcher_raw = (self.launcher or self.source or "native").upper()
+        launcher_badge = f"<span background='#00e69926' foreground='#00e699' weight='bold'> [{launcher_raw}] </span>"
+
+        # 2. Platform Badge
+        is_wine_env = (
+            (self.source or "").lower() in ("steam", "lutris", "heroic", "wine", "filesystem")
+            or (self.launcher or "").lower() in ("wine", "proton", "bottles")
+        )
+        plat_str = self.platform or ("Windows" if is_wine_env else "Linux")
+        plat_badge = f"<span background='#0284c726' foreground='#38bdf8' weight='bold'> [{plat_str.upper()}] </span>"
+
+        # 3. Wine Version Badge
+        wine_str = self.wine_version or ("Wine-GE / Proton" if is_wine_env else "Native")
+        wine_badge = f"<span background='#a855f726' foreground='#c084fc' weight='bold'> [{wine_str.upper()}] </span>"
+
+        # 4. Version Badge
+        ver_str = self.version or "1.0"
+        ver_tag = f"v{ver_str}" if not ver_str.startswith("v") else ver_str
+        ver_badge = f"<span background='#47556940' foreground='#e2e8f0' weight='bold'> [{ver_tag}] </span>"
+
+        # 5. Favorite Indicator
+        fav_icon = "★" if self.favorite else "☆"
+        fav_str = "★ FAVORITE" if self.favorite else "☆ STANDARD"
+        fav_bg = "#eab30826" if self.favorite else "#33415540"
+        fav_fg = "#facc15" if self.favorite else "#94a3b8"
+        fav_badge = f"<span background='{fav_bg}' foreground='{fav_fg}' weight='bold'> {fav_str} </span>"
+
+        # 6. Playtime
+        hours = self.playtime_minutes // 60
+        mins = self.playtime_minutes % 60
+        pt_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+
+        # 7. Last Played & Launch Count
+        last_str = self.last_played[:10] if self.last_played else "Never"
+        date_add_str = (self.date_added or "")[:10] or "Recent"
+
+        # 8. Hero, Logo, Icon & Artwork Fallbacks
+        hero_str = str(self.hero.name) if self.hero else None
+        logo_str = str(self.logo.name) if self.logo else None
+        icon_str = str(self.icon.name) if self.icon else (str(self.cover.name) if self.cover else "[Fallback Icon]")
+
+        logo_tag = f"  <span foreground='#38bdf8' size='small' weight='bold'>✨ {logo_str}</span>" if logo_str else ""
+
+        if hero_str:
+            art_status = f"🖼️ <b>Hero Artwork:</b> <span foreground='#00e699'>{hero_str}</span>"
+            if logo_str:
+                art_status += f"  •  ✨ <b>Logo:</b> <span foreground='#38bdf8'>{logo_str}</span>"
+        else:
+            art_status = f"🎮 <b>Game Icon:</b> <span foreground='#38bdf8'>{icon_str}</span>  •  🎨 <b>Banner:</b> <span foreground='#00e699'>Gradient Glassmorphism Active</span>"
+
+        # Compose multi-line premium information header
+        # Line 1: Large Game Title + Logo Tag + Favorite Badge
+        line1 = f"<span font_desc='Outfit Bold 15' size='large' weight='heavy' foreground='#ffffff'><b>{self.title}</b></span>{logo_tag}  {fav_badge}"
+        # Line 2: Badges row (Launcher, Platform, Wine, Version)
+        line2 = f"<b>Launcher:</b> {launcher_badge}  •  <b>Platform:</b> {plat_badge}  •  <b>Wine:</b> {wine_badge}  •  <b>Version:</b> {ver_badge}"
+        # Line 3: Small metadata row (Playtime, Last Played, Launches, Date Added)
+        line3 = f"<span size='small' foreground='#94a3b8'>⏱ <b>Playtime:</b> <span foreground='#f8fafc' weight='bold'>{pt_str}</span>  •  📅 <b>Last Played:</b> <span foreground='#f8fafc' weight='bold'>{last_str}</span>  •  🔢 <b>Launches:</b> <span foreground='#f8fafc' weight='bold'>{self.launch_count}</span>  •  ➕ <b>Added:</b> <span foreground='#f8fafc'>{date_add_str}</span></span>"
+        # Line 4: Artwork & Visual status (Never looks empty)
+        line4 = f"<span size='small' foreground='#94a3b8'>{art_status}</span>"
+
+        return f"{line1}\n{line2}\n{line3}\n{line4}"
+
     def formatted_summary(self) -> str:
         """Return formatted multi-line summary string for dialog display or CLI output."""
         fav_icon = "★ Yes" if self.favorite else "No"
@@ -92,6 +171,9 @@ class GameDetails:
         """Format a live rich details panel string with all metadata fields and artwork fallbacks."""
         launcher_badge = f"[{self.launcher.upper()}]" if self.launcher else "[NATIVE]"
         fav_str = "★ Yes" if self.favorite else "No"
+        fav_badge = "★ FAVORITE" if self.favorite else "☆ STANDARD"
+        fav_bg = "#eab30826" if self.favorite else "#33415540"
+        fav_fg = "#facc15" if self.favorite else "#94a3b8"
         last_str = self.last_played[:19] if self.last_played else "Never"
         date_add_str = (self.date_added or "Recently Added")[:10]
         
@@ -111,40 +193,38 @@ class GameDetails:
         
         hero_str = str(self.hero.name) if self.hero else "[Fallback Icon]"
         logo_str = str(self.logo.name) if self.logo else "[Fallback Icon]"
+        icon_str = str(self.icon.name) if self.icon else "[Fallback Icon]"
+
+        l_badge = f"<span background='#00e69926' foreground='#00e699' weight='bold'> {launcher_badge} </span>"
+        p_badge = f"<span background='#0284c726' foreground='#38bdf8' weight='bold'> [{plat_str.upper()}] </span>"
+        w_badge = f"<span background='#a855f726' foreground='#c084fc' weight='bold'> [{wine_str.upper()}] </span>"
+        v_badge = f"<span background='#47556940' foreground='#e2e8f0' weight='bold'> [v{ver_str}] </span>"
+        f_badge = f"<span background='{fav_bg}' foreground='{fav_fg}' weight='bold'> {fav_badge} </span>"
+
+        art_status = (
+            f"<b>Hero:</b> {hero_str}  •  <b>Logo:</b> {logo_str}"
+            if self.hero
+            else f"<b>Icon:</b> {icon_str}  •  <b>Banner:</b> <span foreground='#00e699'>Gradient Active</span>  •  <b>Hero:</b> {hero_str}  •  <b>Logo:</b> {logo_str}"
+        )
 
         return (
-            f"<b>Title:</b> {self.title}  •  <b>Launcher:</b> {launcher_badge}  •  <b>Platform:</b> {plat_str}  •  <b>Wine:</b> {wine_str}\n"
+            f"<span font_desc='Outfit Bold 14' size='large' weight='heavy' foreground='#ffffff'><b>Title:</b> {self.title}</span>  {f_badge}  •  "
+            f"<b>Launcher:</b> {launcher_badge} {l_badge}  •  <b>Platform:</b> {plat_str} {p_badge}  •  <b>Wine:</b> {wine_str} {w_badge}\n"
             f"<b>Executable:</b> {exec_str}  •  <b>Install Path:</b> {install_str}\n"
-            f"<b>Version:</b> {ver_str}  •  <b>Playtime:</b> {pt_str}  •  <b>Last Played:</b> {last_str}  •  <b>Date Added:</b> {date_add_str}\n"
-            f"<b>Favorite:</b> {fav_str}  •  <b>Collections:</b> {colls_str}  •  <b>Tags:</b> {tags_str}  •  <b>Hero:</b> {hero_str}  •  <b>Logo:</b> {logo_str}"
+            f"<b>Version:</b> {ver_str} {v_badge}  •  <b>Playtime:</b> {pt_str}  •  <b>Last Played:</b> {last_str}  •  <b>Date Added:</b> {date_add_str}\n"
+            f"<b>Favorite:</b> {fav_str}  •  <b>Collections:</b> {colls_str}  •  <b>Tags:</b> {tags_str}  •  {art_status}"
         )
 
     def format_rofi_mesg(self) -> str:
-        """Return a compact single-line rich-text string for Rofi's -mesg status bar.
+        """Return a rich Pango markup string for Rofi's -mesg status bar or details header.
 
-        Designed to display live game details below the keyboard hint bar when a
-        game is selected. Uses Pango markup supported by Rofi's -mesg field.
+        Designed to display live game details and premium header below the keyboard hint bar
+        or as the prominent game header in dedicated details views.
 
         Returns:
             A Pango markup string suitable for passing to Rofi ``-mesg``.
         """
-        launcher_badge = f"[{self.launcher.upper()}]" if self.launcher else "[NATIVE]"
-        fav_icon = "★" if self.favorite else "☆"
-        last_str = self.last_played[:10] if self.last_played else "Never"
-        hours = self.playtime_minutes // 60
-        mins = self.playtime_minutes % 60
-        pt_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
-        is_wine_env = (
-            (self.source or "").lower() in ("steam", "lutris", "heroic", "wine", "filesystem")
-            or (self.launcher or "").lower() in ("wine", "proton", "bottles")
-        )
-        plat_str = self.platform or ("Windows" if is_wine_env else "Linux")
-        return (
-            f"<b>{self.title}</b>  {fav_icon}  •  "
-            f"<b>Launcher:</b> {launcher_badge}  <b>Platform:</b> {plat_str}  •  "
-            f"<b>Playtime:</b> {pt_str}  <b>Last Played:</b> {last_str}  •  "
-            f"<b>Launches:</b> {self.launch_count}"
-        )
+        return self.format_header_pango()
 
 
 def format_rofi_mesg(game: "Game", metadata_cache: Any | None = None) -> str:  # noqa: F821

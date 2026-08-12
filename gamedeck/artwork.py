@@ -178,6 +178,37 @@ class ArtworkCache:
 
         return dest_file
 
+    def resolve_artwork_with_priority(self, game: Game) -> Path | str:
+        """Resolve primary artwork according to strict priority hierarchy:
+        1. Hero Image
+        2. Portrait Cover
+        3. Capsule
+        4. Executable Icon
+        5. Placeholder
+        """
+        # 1. Hero Image
+        hero = self.get_artwork(game.id, "heroes") or getattr(game, "hero", None)
+        if hero and Path(hero).is_file():
+            return Path(hero)
+
+        # 2. Portrait Cover
+        cover = self.get_artwork(game.id, "covers") or getattr(game, "cover", None)
+        if cover and Path(cover).is_file():
+            return Path(cover)
+
+        # 3. Capsule
+        capsule = self.get_artwork(game.id, "capsules")
+        if capsule and Path(capsule).is_file():
+            return Path(capsule)
+
+        # 4. Executable Icon
+        icon = self.get_artwork(game.id, "icons") or getattr(game, "icon", None)
+        if icon and Path(icon).is_file():
+            return Path(icon)
+
+        # 5. Placeholder
+        return self.generate_placeholder(game)
+
     def resolve_artwork(self, game: Game) -> Game:
         """Enrich a Game model with cached icons, logos, heroes, and covers with graceful fallbacks."""
         cached_icon = self.get_artwork(game.id, "icons")
@@ -210,6 +241,7 @@ class ArtworkCache:
         url: str,
         on_complete: Callable[[str, str, Path], None] | None = None,
         timeout: float = 3.0,
+        force: bool = False,
     ) -> None:
         """Download artwork in a non-blocking background daemon thread without delaying startup.
 
@@ -219,12 +251,13 @@ class ArtworkCache:
             url: Remote HTTP/HTTPS URL of the artwork image.
             on_complete: Optional callback invoked with (game_id, art_type, file_path).
             timeout: Network request timeout in seconds.
+            force: If True, re-download artwork even if cached locally (for metadata refresh).
         """
         if self.offline_mode or not url or not url.startswith("http"):
             return
 
-        # Do not re-download if already cached locally
-        if self.has_artwork(game_id, art_type):
+        # Do not re-download if already cached locally, unless force=True
+        if not force and self.has_artwork(game_id, art_type):
             return
 
         def _download_task() -> None:

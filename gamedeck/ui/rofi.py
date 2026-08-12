@@ -20,6 +20,7 @@ from gamedeck.ui.views import (
     ViewManager,
     ViewMode,
     get_card_style,
+    get_rofi_env,
 )
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "show_menu",
     "select_game",
     "generate_search_metadata",
+    "get_rofi_env",
     "ViewMode",
     "ViewManager",
     "GridViewRenderer",
@@ -34,6 +36,8 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
 
 _ACTION_ORDER: tuple[str, ...] = (
     "play",
@@ -186,15 +190,15 @@ class RofiUI:
     def show_game_details(self, game: Game, metadata_cache: Any = None) -> None:
         """Open a dedicated Rofi details overlay for a game (triggered by Ctrl+D).
 
-        Displays hero artwork, full metadata, tags, collections, and keyboard hints
-        in a wide glassmorphism Rofi dialog. No click required — pure keyboard flow.
+        Displays a premium information header with hero artwork / logo / icon fallback,
+        large title, launcher/platform/wine/version badges, playtime, last played, launch count,
+        and favorite indicator in a wide glassmorphism Rofi dialog.
 
         Args:
             game: The Game model to display details for.
             metadata_cache: Optional MetadataCache for dynamic metadata lookup.
         """
         from gamedeck.details import GameDetailsProvider
-        from gamedeck.details import format_rofi_mesg
 
         # Build full details
         provider = GameDetailsProvider(metadata_cache=metadata_cache) if metadata_cache else GameDetailsProvider()
@@ -204,16 +208,33 @@ class RofiUI:
             logger.warning("show_game_details: Could not resolve details for %s", game.id)
             return
 
-        # Format playtime
+        # Resolve artwork files for hero banner, logo, and icon
+        from gamedeck.artwork import ArtworkCache
+        from gamedeck.ui.artwork_resolver import ArtworkResolver
+        art_cache = ArtworkCache()
+        art_resolver = ArtworkResolver()
+
+        hero_path: str | None = None
+        if details.hero and Path(details.hero).is_file():
+            hero_path = str(details.hero)
+        else:
+            resolved_hero = art_resolver.get_hero(game) or art_cache.get_artwork(game.id, "heroes")
+            if resolved_hero and Path(resolved_hero).is_file():
+                hero_path = str(resolved_hero)
+
+        logo_path = details.logo or art_cache.get_artwork(game.id, "logos")
+        icon_path = details.icon or art_resolver.get_icon(game) or art_cache.get_artwork(game.id, "icons")
+        cover_path = details.cover or art_resolver.get_cover(game) or art_cache.get_artwork(game.id, "covers")
+
+        # Format playtime & metadata strings
         hours = details.playtime_minutes // 60
         mins = details.playtime_minutes % 60
         pt_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
 
-        # Infer platform
         is_wine = (details.launcher or "").lower() in ("wine", "proton", "bottles")
-        plat_str = details.platform or ("Windows" if is_wine else "Linux")
-        wine_str = details.wine_version or ("Wine/Proton" if is_wine else "Native")
-
+        plat_str = details.platform or ("Windows (Wine/Proton)" if is_wine else "Linux Native")
+        wine_str = details.wine_version or ("Wine-GE / Proton" if is_wine else "Native")
+        ver_str = details.version or "1.0"
         last_str = details.last_played[:19] if details.last_played else "Never"
         date_str = (details.date_added or "")[:10] or "Unknown"
         fav_icon = "★ Yes" if details.favorite else "☆ No"
@@ -221,14 +242,19 @@ class RofiUI:
         colls_str = ", ".join(details.collections) if details.collections else "None"
         notes_str = (details.notes or "No notes").strip()
         exec_str = str(details.executable) if details.executable else "N/A"
+        install_str = str(details.install_path) if details.install_path else "N/A"
         launcher_badge = f"[{details.launcher.upper()}]" if details.launcher else "[NATIVE]"
 
-        # Build display lines for the details dialog
+        # Build premium information header via details.format_header_pango()
+        header_mesg = details.format_header_pango()
+
+        # Build property and action lines for keyboard navigation below header
         detail_lines = [
             f"<b>🎮 Title</b>       {details.title}",
-            f"<b>🚀 Launcher</b>    {launcher_badge}",
+            f"<b>🚀 Launcher</b>    {launcher_badge} ({details.source})",
             f"<b>🖥 Platform</b>    {plat_str}",
             f"<b>🍷 Runner</b>      {wine_str}",
+            f"<b>🏷️ Version</b>     v{ver_str}",
             f"<b>⏱ Playtime</b>    {pt_str}",
             f"<b>📅 Last Played</b> {last_str}",
             f"<b>➕ Date Added</b>  {date_str}",
@@ -236,35 +262,57 @@ class RofiUI:
             f"<b>★  Favorite</b>    {fav_icon}",
             f"<b>📁 Collections</b> {colls_str}",
             f"<b>🏷 Tags</b>        {tags_str}",
-            f"<b>📝 Notes</b>       {notes_str}",
             f"<b>⚙ Executable</b>  {exec_str}",
+            f"<b>📂 Install Path</b> {install_str}",
+            f"<b>📝 Notes</b>       {notes_str}",
+            "<b>⬅ Back to Library</b>",
         ]
 
-        details_rasi = """
-* {
+        # Dynamic glassmorphism RASI theme with hero artwork background or emerald gradient
+        if hero_path:
+            message_bg_css = f"""
+    background-image: url("{hero_path}", width);
+    background-color: #0a1814b8;
+    border: 1.5px solid;
+    border-color: #00e69966;
+    border-radius: 16px;
+    padding: 20px 24px;
+"""
+        else:
+            message_bg_css = """
+    background-image: linear-gradient(to right, #091a14f4, #122820ea, #1a382df0, #0b1813f8);
+    background-color: #0c1613fa;
+    border: 1.5px solid;
+    border-color: #00e69944;
+    border-radius: 16px;
+    padding: 20px 24px;
+"""
+
+        details_rasi = f"""
+* {{
     background-color: transparent;
     text-color: #e2e8f0;
     font: "Outfit 11";
-}
+}}
 
-window {
-    width: 60%;
+window {{
+    width: 65%;
     location: center;
     anchor: center;
     border: 1.5px solid;
     border-color: #00e69966;
     border-radius: 20px;
-    background-color: #0a1612fa;
+    background-color: #08120efa;
     padding: 24px;
-}
+}}
 
-mainbox {
-    spacing: 12px;
+mainbox {{
+    spacing: 14px;
     children: [ inputbar, message, listview ];
     background-color: transparent;
-}
+}}
 
-inputbar {
+inputbar {{
     background-color: #14201ce0;
     border: 1px solid;
     border-color: #00e69944;
@@ -272,67 +320,67 @@ inputbar {
     padding: 10px 16px;
     spacing: 12px;
     children: [ prompt, entry ];
-}
+}}
 
-prompt {
+prompt {{
     text-color: #00e699;
     font: "Outfit Bold 12";
     background-color: transparent;
-}
+}}
 
-entry {
-    text-color: transparent;
-    placeholder: "";
+entry {{
+    text-color: #f1f5f9;
+    font: "Outfit Regular 11";
+    placeholder: "Search properties or press Enter to close...";
+    placeholder-color: #64748b;
     background-color: transparent;
-}
+}}
 
-message {
-    background-color: #14201cc8;
-    border: 1px solid;
-    border-color: #00e69933;
-    border-radius: 12px;
-    padding: 10px 16px;
-}
+message {{
+{message_bg_css}
+}}
 
-textbox {
-    text-color: #94a3b8;
-    font: "Outfit Regular 9.5";
+textbox {{
+    text-color: #f1f5f9;
+    font: "Outfit Regular 10.5";
     background-color: transparent;
-}
+    markup: true;
+}}
 
-listview {
+listview {{
     layout: vertical;
-    spacing: 4px;
+    spacing: 5px;
     cycle: false;
     dynamic: false;
     scrollbar: false;
     background-color: transparent;
-}
+    lines: 9;
+}}
 
-element {
+element {{
     orientation: horizontal;
     padding: 7px 14px;
-    border-radius: 8px;
-    background-color: #14201ca0;
+    border-radius: 9px;
+    background-color: #12201ca0;
     border: 1px solid;
     border-color: #24383260;
     text-color: #cbd5e1;
-}
+}}
 
-element selected {
-    background-color: #00e69920;
+element selected {{
+    background-color: #00e69922;
     border: 1.5px solid;
-    border-color: #00e69980;
-    text-color: #e2e8f0;
-}
+    border-color: #00e69988;
+    text-color: #ffffff;
+}}
 
-element-text {
+element-text {{
     vertical-align: 0.5;
     font: "Outfit Regular 10.5";
     text-color: inherit;
     background-color: transparent;
     markup: true;
-}
+}}
 """
         executable = shutil.which(self.rofi_bin)
         if executable is None:
@@ -342,22 +390,17 @@ element-text {
             executable,
             "-dmenu",
             "-p", f"  {details.title}",
-            "-mesg", f"<b>Enter</b> Close  •  <b>Ctrl+D</b> Back to Library",
+            "-mesg", header_mesg,
             "-no-custom",
             "-markup-rows",
-            "-lines", str(min(len(detail_lines), 13)),
+            "-lines", str(min(len(detail_lines), 9)),
             "-theme-str", details_rasi.strip(),
         ]
 
         try:
-            subprocess.run(
+            self._run_rofi(
                 cmd,
-                input="\n".join(detail_lines) + "\n",
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload="\n".join(detail_lines) + "\n",
             )
         except OSError as err:
             logger.error("show_game_details: Failed to launch Rofi details dialog: %s", err)
@@ -507,6 +550,24 @@ element-text {
 
         return cmd, executable
 
+    def _run_rofi(
+        self,
+        cmd: list[str],
+        input_payload: str = "",
+        check: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        """Execute Rofi subprocess with automatic GNOME Wayland/X11 environment fallback."""
+        return subprocess.run(
+            cmd,
+            input=input_payload,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=check,
+            env=get_rofi_env(),
+        )
+
     def select(
         self,
         games: list[Game],
@@ -521,6 +582,7 @@ element-text {
         prompt_str = prompt or f"GameDeck  •  Library  •  Grid View  •  {len(games)} Games"
         vm = self._ensure_view_manager()
 
+        active_game: Game | None = None
         while True:
             # 1. Pluggable Graphic/Grid Views (Grid, Deck, Compact, Hero, Carousel)
             if vm.active_mode != ViewMode.LIST:
@@ -531,7 +593,11 @@ element-text {
                     prompt=view_prompt,
                     theme_path=self.theme,
                     theme_str=self.theme_str,
+                    active_game=active_game,
                 )
+
+                if selected is not None and isinstance(selected, Game):
+                    active_game = selected
 
                 if action_trigger.startswith("switch_view_"):
                     target = action_trigger.replace("switch_view_", "")
@@ -636,14 +702,9 @@ element-text {
                 logger.debug("Opening Rofi menu with %d nav items and %d games", nav_count, len(games))
 
                 try:
-                    result = subprocess.run(
+                    result = self._run_rofi(
                         cmd,
-                        input=input_payload,
-                        capture_output=True,
-                        text=True,
-                        encoding="utf-8",
-                        errors="replace",
-                        check=False,
+                        input_payload=input_payload,
                     )
                 except OSError as err:
                     logger.error("Failed to execute Rofi process: %s", err)
@@ -784,14 +845,9 @@ element-text {
         input_payload = "\n".join(items) + "\n"
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError as err:
             logger.error("Failed to execute Rofi action dialog: %s", err)
@@ -837,17 +893,13 @@ element-text {
         return ("back", None)
 
     def _build_game_info_mesg(self, game: Game) -> str:
-        """Build a compact rich information string for display as Rofi -mesg header.
+        """Build a premium information header string for display as Rofi -mesg header.
 
-        Shows key game details inline in the action menu so no extra navigation is needed
-        to see Launcher, Platform, Executable, Last Played, Playtime, Favorite, Tags.
+        Shows key game details inline in the action menu with large title, launcher/platform/wine/version badges,
+        playtime, last played, launch count, and favorite indicator.
         """
-        lines: list[str] = []
-
-        # Source & Launcher
-        source = game.source.capitalize() if game.source else "Unknown"
-        launcher = game.launcher if game.launcher else "native"
-        lines.append(f"<b>Source:</b> {source}  •  <b>Launcher:</b> {launcher}")
+        launcher_raw = (game.launcher or game.source or "native").upper()
+        l_badge = f"<span background='#00e69926' foreground='#00e699' weight='bold'> [{launcher_raw}] </span>"
 
         # Platform
         platform = getattr(game, "platform", None)
@@ -860,52 +912,58 @@ element-text {
                 platform = "Steam (Linux/Proton)"
             else:
                 platform = "Linux Native"
-        lines.append(f"<b>Platform:</b> {platform}")
+        p_badge = f"<span background='#0284c726' foreground='#38bdf8' weight='bold'> [{platform.upper()}] </span>"
+
+        # Wine/Proton runner badge
+        wine_ver = getattr(game, "wine_version", None) or "Native"
+        w_badge = f"<span background='#a855f726' foreground='#c084fc' weight='bold'> [{wine_ver.upper()}] </span>"
+
+        # Version
+        version = getattr(game, "version", None) or "1.0"
+        v_badge = f"<span background='#47556940' foreground='#e2e8f0' weight='bold'> [v{version}] </span>"
+
+        # Favorite badge
+        fav_badge = "★ FAVORITE" if game.favorite else "☆ STANDARD"
+        fav_bg = "#eab30826" if game.favorite else "#33415540"
+        fav_fg = "#facc15" if game.favorite else "#94a3b8"
+        f_badge = f"<span background='{fav_bg}' foreground='{fav_fg}' weight='bold'> {fav_badge} </span>"
+
+        # Playtime
+        playtime = getattr(game, "playtime_minutes", 0) or 0
+        hrs = playtime // 60
+        mins = playtime % 60
+        pt_str = f"{hrs}h {mins}m" if hrs > 0 else f"{mins}m"
+
+        # Last played & launch count
+        last = game.last_played
+        last_str = last[:10] if last else "Never"
+
+        # Header lines
+        lines: list[str] = [
+            f"<span font_desc='Outfit Bold 15' size='large' weight='heavy' foreground='#ffffff'><b>{game.name}</b></span>  {f_badge}",
+            f"<b>Launcher:</b> {l_badge}  •  <b>Platform:</b> {p_badge}  •  <b>Wine:</b> {w_badge}  •  <b>Version:</b> {v_badge}",
+            f"<span size='small' foreground='#94a3b8'>⏱ <b>Playtime:</b> <span foreground='#f8fafc' weight='bold'>{pt_str}</span>  •  "
+            f"📅 <b>Last Played:</b> <span foreground='#f8fafc' weight='bold'>{last_str}</span>  •  "
+            f"🔢 <b>Launches:</b> <span foreground='#f8fafc' weight='bold'>{game.launch_count}</span></span>",
+        ]
 
         # Executable path (shortened for display)
         if game.executable:
             exe_path = str(game.executable)
             if len(exe_path) > 60:
                 exe_path = "…" + exe_path[-57:]
-            lines.append(f"<b>Executable:</b> {exe_path}")
+            lines.append(f"<span size='small' foreground='#64748b'>⚙ <b>Executable:</b> {exe_path}</span>")
 
-        # Wine/Proton version
-        wine_version = getattr(game, "wine_version", None)
-        if wine_version:
-            lines.append(f"<b>Runner:</b> {wine_version}")
-
-        # Version
-        version = getattr(game, "version", None)
-        if version:
-            lines.append(f"<b>Version:</b> {version}")
-
-        # Playtime
-        playtime = getattr(game, "playtime_minutes", 0) or 0
-        if playtime > 0:
-            hrs, mins = divmod(playtime, 60)
-            pt_str = f"{hrs}h {mins}m" if hrs else f"{mins}m"
-            lines.append(f"<b>Playtime:</b> {pt_str}")
-
-        # Last played & launch count
-        last = game.last_played
-        last_str = last[:10] if last else "Never"
-        fav_icon = "★" if game.favorite else "☆"
-        lines.append(f"<b>Last Played:</b> {last_str}  •  <b>Launches:</b> {game.launch_count}  •  {fav_icon}")
-
-        # Tags
+        # Tags & Collections
         tags = getattr(game, "tags", None) or []
-        if tags:
-            lines.append(f"<b>Tags:</b> {',  '.join(tags)}")
-
-        # Collections
         collections = getattr(game, "collections", None) or []
+        meta_parts: list[str] = []
+        if tags:
+            meta_parts.append(f"🏷 <b>Tags:</b> {', '.join(tags)}")
         if collections:
-            lines.append(f"<b>Collections:</b> {',  '.join(collections)}")
-
-        # Notes
-        notes = getattr(game, "notes", None)
-        if notes:
-            lines.append(f"<b>Notes:</b> {notes}")
+            meta_parts.append(f"📁 <b>Collections:</b> {', '.join(collections)}")
+        if meta_parts:
+            lines.append(f"<span size='small' foreground='#64748b'>{'  •  '.join(meta_parts)}</span>")
 
         return "\n".join(lines)
 
@@ -931,14 +989,9 @@ element-text {
         input_payload = "\n".join(items) + "\n"
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             return ("cancel", None)
@@ -1005,14 +1058,9 @@ element-text {
         input_payload = "\n".join(items) + "\n"
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             return ("cancel", None)
@@ -1061,14 +1109,9 @@ element-text {
         input_payload = "\n".join(items) + "\n"
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             return ("cancel", None)
@@ -1146,14 +1189,9 @@ element-text {
         input_payload = "\n".join(items) + "\n"
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             return ("cancel", None)
@@ -1211,14 +1249,9 @@ element-text {
         input_payload = "\n".join(items) + "\n"
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             return ("cancel", None)
@@ -1264,14 +1297,9 @@ element-text {
             cmd.extend(["-theme-str", self.theme_str.strip()])
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input="",
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload="",
             )
             if result.returncode == 0:
                 text = result.stdout.strip()
@@ -1298,6 +1326,7 @@ element-text {
 
         cmd, _ = self._get_base_cmd(prompt_str, len(detail_lines))
         cmd.append("-no-custom")
+        cmd.append("-markup-rows")
 
         if self.theme is not None:
             pass  # already applied by _get_base_cmd
@@ -1307,14 +1336,9 @@ element-text {
         input_payload = "\n".join(detail_lines) + "\n"
 
         try:
-            subprocess.run(
+            self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             pass
@@ -1344,14 +1368,9 @@ element-text {
         input_payload = "\n".join(items) + "\n"
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             return ("cancel", None)
@@ -1395,14 +1414,9 @@ element-text {
         input_payload = "\n".join(items) + "\n"
 
         try:
-            subprocess.run(
+            self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             pass
@@ -1436,14 +1450,9 @@ element-text {
         input_payload = "\n".join(lines) + "\n"
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             return None
@@ -1514,14 +1523,9 @@ element-text {
         input_payload = "\n".join(lines) + "\n"
 
         try:
-            result = subprocess.run(
+            result = self._run_rofi(
                 cmd,
-                input=input_payload,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
+                input_payload=input_payload,
             )
         except OSError:
             return None

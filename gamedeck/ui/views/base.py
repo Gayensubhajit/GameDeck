@@ -12,14 +12,39 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import os
+
 from gamedeck.models import Game
 
 __all__ = [
     "LibraryView",
     "ViewMode",
+    "get_rofi_env",
 ]
 
 logger = logging.getLogger(__name__)
+
+
+def get_rofi_env() -> dict[str, str]:
+    """Prepare a robust environment dictionary for executing Rofi across display servers.
+
+    On GNOME Wayland (Mutter), Rofi with Wayland backend crashes because GNOME does not
+    implement the zwlr_layer_shell_v1 protocol ('Rofi on wayland requires support for the layer shell protocol').
+    When GNOME/Mutter is detected under Wayland and DISPLAY is present (Xwayland),
+    we route Rofi to use the X11/Xwayland backend (GDK_BACKEND=x11) so the window opens reliably.
+    On wlroots compositors (Hyprland, Sway, etc.), native Wayland is preserved.
+    """
+    env = dict(os.environ)
+    desktop = env.get("XDG_CURRENT_DESKTOP", "").upper()
+    session_type = env.get("XDG_SESSION_TYPE", "").lower()
+
+    is_gnome_or_mutter = any(d in desktop for d in ("GNOME", "MUTTER", "PANTHEON", "UNITY"))
+    if session_type == "wayland" and is_gnome_or_mutter and env.get("DISPLAY"):
+        env.pop("WAYLAND_DISPLAY", None)
+        env["GDK_BACKEND"] = "x11"
+
+    return env
+
 
 
 class ViewMode(str, Enum):

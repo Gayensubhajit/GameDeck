@@ -15,7 +15,8 @@ from typing import Any
 
 from gamedeck.models import Game
 from gamedeck.search.tokenizer import tokenize as _search_tokenize
-from gamedeck.ui.views.base import LibraryView
+from gamedeck.ui.views.base import LibraryView, get_rofi_env
+
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +287,7 @@ element-text {
                 encoding="utf-8",
                 errors="replace",
                 check=False,
+                env=get_rofi_env(),
             )
         except OSError as err:
             logger.error("Failed to execute Rofi list process: %s", err)

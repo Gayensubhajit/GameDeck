@@ -43,11 +43,12 @@ class MetadataManager:
         if self.steamgriddb is None:
             self.steamgriddb = SteamGridDBClient(artwork_cache=self.artwork_cache)
 
-    def enrich(self, game: Game) -> Game:
+    def enrich(self, game: Game, force_refresh: bool = False) -> Game:
         """Enrich a single Game model with cached metadata and artwork assets.
 
         Args:
             game: The raw Game model instance returned from a provider.
+            force_refresh: If True, force re-downloads artwork during metadata refresh.
 
         Returns:
             The enriched Game instance.
@@ -56,15 +57,16 @@ class MetadataManager:
         self.metadata_cache.sync_game(game)
 
         # 2. Resolve artwork from local cache / fallback hierarchies
-        self.resolve_artwork(game)
+        self.resolve_artwork(game, force_refresh=force_refresh)
 
         return game
 
-    def enrich_all(self, games: list[Game]) -> list[Game]:
+    def enrich_all(self, games: list[Game], force_refresh: bool = False) -> list[Game]:
         """Enrich a list of Game models with cached metadata and artwork.
 
         Args:
             games: List of raw Game model instances from providers.
+            force_refresh: If True, force re-downloads artwork during metadata refresh.
 
         Returns:
             List of synchronized and artwork-enriched Game instances.
@@ -74,26 +76,21 @@ class MetadataManager:
 
         # 2. Resolve artwork for each game
         for game in synced_games:
-            self.resolve_artwork(game)
+            self.resolve_artwork(game, force_refresh=force_refresh)
 
         return synced_games
 
-    def resolve_artwork(self, game: Game) -> Game:
-        """Resolve icon, logo, hero, and cover artwork paths for a Game.
-
-        Strict Icon Priority:
-        1. Cached custom icon (if downloaded by ArtworkCache / ArtworkManager)
-        2. Native application icon from the provider (Steam, Lutris, Heroic, .desktop)
-        3. Executable icon (when available)
-        4. Generic fallback icon
-
-        Guarantees:
-        - Never replaces a valid native provider icon with a generic fallback.
-        - Preserves existing icon fields on Game models returned by providers.
-        - Enriches missing artwork fields without removing existing ones.
+    def resolve_artwork(self, game: Game, force_refresh: bool = False) -> Game:
+        """Resolve icon, logo, hero, and cover artwork paths for a Game following priority hierarchy:
+        1 Hero Image
+        2 Portrait Cover
+        3 Capsule
+        4 Executable Icon
+        5 Placeholder
 
         Args:
             game: Game model instance.
+            force_refresh: If True, force background fetch for newer artwork versions.
 
         Returns:
             The Game instance with resolved artwork attributes.
@@ -103,6 +100,7 @@ class MetadataManager:
         cached_logo = self.artwork_cache.get_artwork(game.id, "logos")
         cached_hero = self.artwork_cache.get_artwork(game.id, "heroes")
         cached_cover = self.artwork_cache.get_artwork(game.id, "covers")
+        cached_capsule = self.artwork_cache.get_artwork(game.id, "capsules")
 
         # Icon priority 1: Custom cached icon overrides default provider icon if present
         if cached_icon is not None:
@@ -122,18 +120,18 @@ class MetadataManager:
             if discovered_cover is not None:
                 game.cover = discovered_cover
 
-        # Trigger background SteamGridDB asset download if any art is missing
+        # Trigger background SteamGridDB asset download (never re-download unless force_refresh=True)
         if self.steamgriddb is not None and self.steamgriddb.is_available():
-            if game.cover is None or game.icon is None or game.logo is None or game.hero is None:
-                self.steamgriddb.fetch_game_artwork_background(game)
+            if force_refresh or game.cover is None or game.icon is None or game.logo is None or game.hero is None:
+                self.steamgriddb.fetch_game_artwork_background(game, force=force_refresh)
 
-        # Fallback hierarchy for logo, hero, cover while preserving icon integrity
+        # Fallback hierarchy following 1-Hero, 2-Cover, 3-Capsule, 4-Icon, 5-Placeholder
+        if game.hero is None:
+            game.hero = cached_hero or cached_cover or game.cover or cached_capsule or game.icon
         if game.logo is None:
             game.logo = cached_logo or game.icon
-        if game.hero is None:
-            game.hero = cached_hero or game.cover or game.icon
         if game.cover is None:
-            game.cover = game.hero or game.icon
+            game.cover = cached_cover or game.hero or cached_capsule or game.icon
 
         return game
 

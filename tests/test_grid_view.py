@@ -159,14 +159,17 @@ class TestGridViewArchitecture(unittest.TestCase):
         self.assertIn("border-color: #00e699;", rasi)
 
     def test_grid_renderer_details_panel_formatting(self) -> None:
-        """Verify rich details panel formats launcher, platform, playtime, and wine version."""
+        """Verify rich Hero Panel formats game title, launcher badge, platform badge, playtime."""
         renderer = GridViewRenderer()
         details_str = renderer._build_details_panel(self.sample_game)
 
         self.assertIn("Black Myth - Wukong", details_str)
-        self.assertIn("Source:</b> Filesystem", details_str)
-        self.assertIn("Launcher:</b> [LUTRIS]", details_str)
-        self.assertIn("Playtime:", details_str)
+        self.assertIn("[LUTRIS]", details_str)          # Launcher badge
+        self.assertIn("Platform:", details_str)         # Platform badge row
+        self.assertIn("Playtime:", details_str)         # Metadata row
+        self.assertIn("Last Played:", details_str)      # Metadata row
+        self.assertIn("Quick Actions:", details_str)    # Quick action hints
+
 
     @patch("subprocess.run")
     @patch("shutil.which", return_value="/usr/bin/rofi")

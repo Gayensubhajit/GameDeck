@@ -18,8 +18,10 @@ from typing import Any
 from gamedeck.models import Game
 from gamedeck.search.tokenizer import tokenize as _search_tokenize
 from gamedeck.ui.artwork_resolver import ArtworkResolver
-from gamedeck.ui.views.base import LibraryView
+from gamedeck.ui.views.base import LibraryView, get_rofi_env
 from gamedeck.ui.views.cards import CardStyle, get_card_style
+from gamedeck.ui.views.hero_panel import HeroPanel
+
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,11 @@ class GridView(LibraryView):
     rofi_bin: str = "rofi"
     accent_color: str = "#00e699"
     secondary_action_key: str = "Alt+Return"
+    hero_panel: HeroPanel = field(default_factory=HeroPanel)
+
+    def __post_init__(self) -> None:
+        """Share the GridView's artwork_resolver with the embedded HeroPanel."""
+        self.hero_panel.artwork_resolver = self.artwork_resolver
 
     def get_card_style(self) -> CardStyle:
         """Get the active CardStyle instance."""
@@ -89,10 +96,17 @@ class GridView(LibraryView):
         columns: int,
         card_style: CardStyle,
         custom_theme_str: str | None = None,
+        hero_image_path: str | None = None,
     ) -> str:
         """Generate frosted-glass RASI theme tokens for grid layout."""
         icon_size = card_style.icon_size_px
         lines_count = max(2, min(4, 3))
+
+        # Hero Panel background: artwork fills the panel or fallback to dark glassmorphism gradient
+        if hero_image_path:
+            hero_bg_rasi = f'background-image: url("{hero_image_path}", width);'
+        else:
+            hero_bg_rasi = "background-image: linear-gradient(to right, #091a14, #0d2218, #162e22, #0a1a12);"
 
         base_rasi = f"""
 * {{
@@ -144,17 +158,19 @@ entry {{
 }}
 
 message {{
-    background-color: #14201cc8;
-    border: 1px solid;
-    border-color: #00e69933;
-    border-radius: 12px;
-    padding: 10px 16px;
+    background-color: #0a1a12;
+    border: 1.5px solid;
+    border-color: #00e69940;
+    border-radius: 16px;
+    padding: 14px 18px;
+    {hero_bg_rasi}
 }}
 
 textbox {{
-    text-color: #94a3b8;
-    font: "Outfit Regular 9.5";
     background-color: transparent;
+    text-color: #e2e8f0;
+    font: "Outfit Regular 10";
+    markup: true;
 }}
 
 listview {{
@@ -172,27 +188,27 @@ listview {{
 element {{
     orientation: vertical;
     children: [ element-icon, element-text ];
-    spacing: 8px;
-    padding: 12px;
-    border-radius: 14px;
-    background-color: #14201ca6;
-    border: 1px solid;
-    border-color: #24383280;
+    spacing: 6px;
+    padding: 10px 8px;
+    border-radius: 16px;
+    background-color: #12201ca8;
+    border: 1.5px solid;
+    border-color: #20352e80;
     text-color: #cbd5e1;
 }}
 
 element selected {{
-    background-color: #00e69926;
-    border: 2px solid;
+    background-color: #00e69928;
+    border: 2.5px solid;
     border-color: #00e699;
-    text-color: #00e699;
+    text-color: #ffffff;
 }}
 
 element-icon {{
     size: {icon_size}px;
     horizontal-align: 0.5;
     vertical-align: 0.5;
-    border-radius: 8px;
+    border-radius: 12px;
     background-color: transparent;
     cursor: pointer;
 }}
@@ -200,7 +216,7 @@ element-icon {{
 element-text {{
     horizontal-align: 0.5;
     vertical-align: 0.5;
-    font: "Outfit SemiBold 10";
+    font: "Outfit SemiBold 10.5";
     text-color: inherit;
     background-color: transparent;
     cursor: pointer;
@@ -282,13 +298,24 @@ element-text {{
         if executable is None:
             raise RuntimeError(f"Rofi executable '{self.rofi_bin}' was not found.")
 
-        # Build details panel message header if active_game is provided, plus persistent status bar
+        # Build Hero Panel message header for the active or first highlighted game
         mesg_parts: list[str] = []
-        if active_game is not None:
-            mesg_parts.append(self._build_details_panel(active_game))
+        hero_image_path: str | None = None
+        effective_game = active_game if active_game is not None else (games[0] if games else None)
+        if effective_game is not None:
+            hero_image_path = self.artwork_resolver.get_hero(effective_game) or self.artwork_resolver.get_cover(effective_game)
+            mesg_parts.append(self.hero_panel.render_panel_pango(effective_game))
+        else:
+            mesg_parts.append(
+                "<span font_desc='Outfit Bold 13' foreground='#00e699' weight='heavy'>🎮 GameDeck Library</span>\n"
+                "<span size='small' foreground='#94a3b8'>No games found in the selected library view.</span>"
+            )
         custom_status = kwargs.get("status_bar") or STATUS_BAR_TEXT
         mesg_parts.append(custom_status)
         full_mesg = "\n".join(mesg_parts)
+
+        # Re-generate theme with hero image path so message block background updates per game
+        grid_theme = self.generate_grid_theme_str(cols, card_style, theme_str, hero_image_path=hero_image_path)
 
         # Write grid theme to cache file for clean and reliable Rofi parsing
         cache_dir = Path.home() / ".cache" / "gamedeck"
@@ -341,6 +368,7 @@ element-text {{
                 encoding="utf-8",
                 errors="replace",
                 check=False,
+                env=get_rofi_env(),
             )
         except OSError as err:
             logger.error("Failed to execute Rofi grid process: %s", err)
@@ -388,36 +416,8 @@ element-text {{
         return (None, ret_code, "cancel")
 
     def _build_details_panel(self, game: Game) -> str:
-        """Format a rich details panel string for the selected game."""
-        source = (game.source or "unknown").capitalize()
-        launcher = (game.launcher or "native").upper()
-        platform = getattr(game, "platform", None) or "Linux Native"
-        wine_ver = getattr(game, "wine_version", None) or "N/A"
-        last_p = getattr(game, "last_played", None) or "Never"
-        date_add_str = (getattr(game, "date_added", None) or "Recently Added")[:10]
-        playtime = getattr(game, "playtime_minutes", 0) or 0
-        hours = playtime // 60
-        mins = playtime % 60
-        pt_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
-        fav_str = "★ Yes" if game.favorite else "No"
-        ver_str = getattr(game, "version", None) or "1.0"
-        exe_path = str(game.executable) if game.executable else "N/A"
-        install_dir = str(Path(game.executable).parent) if game.executable else "N/A"
-        tags_str = ", ".join(game.tags) if getattr(game, "tags", None) else "None"
-        colls_str = ", ".join(game.collections) if getattr(game, "collections", None) else "None"
-
-        hero_art = self.artwork_resolver.get_hero(game)
-        logo_art = getattr(game, "logo", None)
-        cover_art = self.artwork_resolver.get_cover(game)
-        hero_str = Path(hero_art).name if hero_art else (Path(cover_art).name if cover_art else "[Fallback Icon]")
-        logo_str = Path(logo_art).name if logo_art else "[Fallback Icon]"
-
-        return (
-            f"<b>Title:</b> {game.name}  •  <b>Launcher:</b> [{launcher}]  •  <b>Source:</b> {source}  •  <b>Platform:</b> {platform}\n"
-            f"<b>Executable:</b> {exe_path}  •  <b>Install Path:</b> {install_dir}\n"
-            f"<b>Wine:</b> {wine_ver}  •  <b>Playtime:</b> {pt_str}  •  <b>Last Played:</b> {last_p}  •  <b>Date Added:</b> {date_add_str}\n"
-            f"<b>Favorite:</b> {fav_str}  •  <b>Version:</b> {ver_str}  •  <b>Collections:</b> {colls_str}  •  <b>Tags:</b> {tags_str}  •  <b>Hero:</b> {hero_str}  •  <b>Logo:</b> {logo_str}"
-        )
+        """Format a rich Hero Panel for the selected game using HeroPanel renderer."""
+        return self.hero_panel.render_panel_pango(game)
 
 
 # Backwards compatibility alias

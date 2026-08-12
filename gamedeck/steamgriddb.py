@@ -67,11 +67,12 @@ class SteamGridDBClient:
         self,
         game: Game,
         on_complete: Any = None,
+        force: bool = False,
     ) -> None:
         """Submit background download tasks for cover, icon, logo, and hero art for a game.
 
         Operates asynchronously through ArtworkCache thread pool without delaying UI startup.
-        Never re-downloads if all assets already exist locally or offline mode is active.
+        Never re-downloads if all assets already exist locally or offline mode is active, unless force=True.
         """
         if not self.is_available():
             logger.debug("SteamGridDB API unavailable or offline mode active; skipping remote fetch for '%s'", game.name)
@@ -83,18 +84,18 @@ class SteamGridDBClient:
         has_icon = self.artwork_cache.has_artwork(game.id, "icons")
         has_logo = self.artwork_cache.has_artwork(game.id, "logos")
 
-        if has_hero and has_cover and has_icon and has_logo:
+        if not force and has_hero and has_cover and has_icon and has_logo:
             return
 
         def _task() -> None:
             try:
-                self._fetch_and_store_all(game, on_complete=on_complete)
+                self._fetch_and_store_all(game, on_complete=on_complete, force=force)
             except Exception as err:
                 logger.debug("SteamGridDB artwork download task failed for '%s': %s", game.name, err)
 
         self.artwork_cache._executor.submit(_task)
 
-    def _fetch_and_store_all(self, game: Game, on_complete: Any = None) -> None:
+    def _fetch_and_store_all(self, game: Game, on_complete: Any = None, force: bool = False) -> None:
         """Search game on SteamGridDB and download missing covers, icons, logos, and heroes."""
         if not self.is_available():
             return
@@ -105,28 +106,28 @@ class SteamGridDBClient:
             return
 
         # Fetch Grids (Covers)
-        if not self.artwork_cache.has_artwork(game.id, "covers"):
+        if force or not self.artwork_cache.has_artwork(game.id, "covers"):
             cover_url = self._get_best_asset_url(game_sgdb_id, "grids")
             if cover_url:
-                self.artwork_cache.fetch_async(game.id, "covers", cover_url, on_complete=on_complete)
+                self.artwork_cache.fetch_async(game.id, "covers", cover_url, on_complete=on_complete, force=force)
 
         # Fetch Icons
-        if not self.artwork_cache.has_artwork(game.id, "icons"):
+        if force or not self.artwork_cache.has_artwork(game.id, "icons"):
             icon_url = self._get_best_asset_url(game_sgdb_id, "icons")
             if icon_url:
-                self.artwork_cache.fetch_async(game.id, "icons", icon_url, on_complete=on_complete)
+                self.artwork_cache.fetch_async(game.id, "icons", icon_url, on_complete=on_complete, force=force)
 
         # Fetch Logos
-        if not self.artwork_cache.has_artwork(game.id, "logos"):
+        if force or not self.artwork_cache.has_artwork(game.id, "logos"):
             logo_url = self._get_best_asset_url(game_sgdb_id, "logos")
             if logo_url:
-                self.artwork_cache.fetch_async(game.id, "logos", logo_url, on_complete=on_complete)
+                self.artwork_cache.fetch_async(game.id, "logos", logo_url, on_complete=on_complete, force=force)
 
         # Fetch Heroes
-        if not self.artwork_cache.has_artwork(game.id, "heroes"):
+        if force or not self.artwork_cache.has_artwork(game.id, "heroes"):
             hero_url = self._get_best_asset_url(game_sgdb_id, "heroes")
             if hero_url:
-                self.artwork_cache.fetch_async(game.id, "heroes", hero_url, on_complete=on_complete)
+                self.artwork_cache.fetch_async(game.id, "heroes", hero_url, on_complete=on_complete, force=force)
 
     def search_game_id(self, game: Game) -> int | None:
         """Search SteamGridDB for a game by Steam appid or normalized game title."""

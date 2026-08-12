@@ -59,13 +59,74 @@ class ArtworkResolver:
         (self.cache_dir / "covers").mkdir(exist_ok=True)
         (self.cache_dir / "capsules").mkdir(exist_ok=True)
         (self.cache_dir / "icons").mkdir(exist_ok=True)
-        (self.cache_dir / "logos").mkdir(exist_ok=True)
+    def clear_cache(self, game_id: str | None = None) -> None:
+        """Clear in-memory thumbnail cache for a specific game or all games."""
+        if game_id:
+            keys_to_remove = [k for k in self._thumbnail_cache if k.startswith(f"{game_id}:")]
+            for k in keys_to_remove:
+                self._thumbnail_cache.pop(k, None)
+        else:
+            self._thumbnail_cache.clear()
+
+    def resolve_primary_artwork(self, game: Game) -> str:
+        """Resolve primary artwork according to strict priority hierarchy:
+        1 Hero Image
+        2 Portrait Cover
+        3 Capsule
+        4 Executable Icon
+        5 Placeholder
+        """
+        cache_key = f"{game.id}:priority"
+        if cache_key in self._thumbnail_cache:
+            cached_path = self._thumbnail_cache[cache_key]
+            if not cached_path.startswith("/") or Path(cached_path).is_file():
+                return cached_path
+
+        # 1. Hero Image
+        hero = self.get_hero(game)
+        if hero:
+            self._thumbnail_cache[cache_key] = hero
+            return hero
+
+        # 2. Portrait Cover
+        cover = self.get_cover(game)
+        if cover:
+            self._thumbnail_cache[cache_key] = cover
+            return cover
+
+        # 3. Capsule
+        capsule = self.get_capsule(game)
+        if capsule:
+            self._thumbnail_cache[cache_key] = capsule
+            return capsule
+
+        # 4. Executable Icon
+        icon = self.get_icon(game)
+        if icon:
+            self._thumbnail_cache[cache_key] = icon
+            return icon
+
+        if game.executable is not None:
+            exe_icon = self._find_executable_icon(Path(game.executable))
+            if exe_icon:
+                self._thumbnail_cache[cache_key] = exe_icon
+                return exe_icon
+
+        # 5. Placeholder
+        placeholder = self.get_placeholder(game)
+        if placeholder:
+            self._thumbnail_cache[cache_key] = placeholder
+            return placeholder
+
+        fallback = self.get_theme_icon(game)
+        self._thumbnail_cache[cache_key] = fallback
+        return fallback
 
     def resolve_grid_cover(self, game: Game, preferred_type: str = "portrait") -> str:
         """Resolve the best artwork for grid view display according to priority:
-        1. SteamGridDB Hero
-        2. SteamGridDB Portrait / Cover
-        3. Steam Capsule
+        1. Hero Image
+        2. Portrait Cover
+        3. Capsule
         4. Executable Icon
         5. Placeholder
         """

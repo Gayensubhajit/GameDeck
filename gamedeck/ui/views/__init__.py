@@ -12,7 +12,7 @@ from typing import Any
 
 from gamedeck.models import Game
 from gamedeck.ui.artwork_resolver import ArtworkResolver
-from gamedeck.ui.views.base import LibraryView, ViewMode
+from gamedeck.ui.views.base import LibraryView, ViewMode, get_rofi_env
 from gamedeck.ui.views.cards import (
     CARD_STYLES,
     CardStyle,
@@ -38,7 +38,9 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "LibraryView",
     "ViewMode",
+    "get_rofi_env",
     "ViewManager",
+
     "BaseViewRenderer",
     "ListView",
     "GridView",

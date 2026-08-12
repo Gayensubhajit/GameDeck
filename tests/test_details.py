@@ -118,6 +118,77 @@ class TestGameDetailsSystem(unittest.TestCase):
         self.assertIn("Hero:</b>", panel)
         self.assertIn("Logo:</b>", panel)
 
+    def test_format_header_pango_with_hero_and_logo(self) -> None:
+        """Verify premium information header displays all required fields with artwork."""
+        hero_file = self.root / "hero.jpg"
+        hero_file.write_bytes(b"hero")
+        logo_file = self.root / "logo.png"
+        logo_file.write_bytes(b"logo")
+
+        game = Game(
+            id="steam_cyberpunk",
+            name="Cyberpunk 2077",
+            source="steam",
+            launcher="steam",
+            appid="1091500",
+            favorite=True,
+            playtime_minutes=360,
+            launch_count=25,
+            last_played="2026-08-08T20:00:00Z",
+            hero=hero_file,
+            logo=logo_file,
+            platform="Linux Native",
+            wine_version="Proton 9.0",
+        )
+        details = self.provider.get_details(game)
+        header = details.format_header_pango()
+
+        # Large Title & Logo
+        self.assertIn("Cyberpunk 2077", header)
+        self.assertIn("logo.png", header)
+        # Badges
+        self.assertIn("[STEAM]", header)
+        self.assertIn("[LINUX NATIVE]", header)
+        self.assertIn("[PROTON 9.0]", header)
+        self.assertIn("[v1.0]", header)
+        self.assertIn("★ FAVORITE", header)
+        # Small metadata
+        self.assertIn("6h 0m", header)
+        self.assertIn("2026-08-08", header)
+        self.assertIn("25", header)
+        # Hero Artwork
+        self.assertIn("hero.jpg", header)
+
+    def test_format_header_pango_fallback_without_artwork(self) -> None:
+        """Verify fallback behavior displays Game Icon, gradient indicator, and Title when artwork is missing."""
+        icon_file = self.root / "game_icon.png"
+        icon_file.write_bytes(b"icon")
+
+        game = Game(
+            id="lutris_indie",
+            name="Hollow Knight",
+            source="lutris",
+            launcher="lutris",
+            favorite=False,
+            playtime_minutes=45,
+            launch_count=2,
+            icon=icon_file,
+        )
+        details = self.provider.get_details(game)
+        header = details.format_header_pango()
+
+        # Title
+        self.assertIn("Hollow Knight", header)
+        # Badges
+        self.assertIn("[LUTRIS]", header)
+        self.assertIn("☆ STANDARD", header)
+        # Fallback Icon & Gradient Banner indicator (never looks empty)
+        self.assertIn("Game Icon:</b>", header)
+        self.assertIn("Gradient Glassmorphism Active", header)
+        # Metadata
+        self.assertIn("45m", header)
+        self.assertIn("2", header)
+
     def test_unknown_game_returns_none(self) -> None:
         """Verify querying non-existent game ID returns None gracefully."""
         details = self.provider.get_details("non_existent_game_id")
